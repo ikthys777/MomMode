@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mom-mode-v5';
+const CACHE_NAME = 'mom-mode-v7';
 
 self.addEventListener('install', event => {
   self.skipWaiting();
@@ -30,18 +30,6 @@ self.addEventListener('fetch', event => {
     }).catch(() => caches.match(event.request).then(c => c || new Response('Offline', { status: 503 })))
   );
 });
-        if (response.ok && response.type === 'basic') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        }
-        return response;
-      });
-    }).catch(() => {
-      if (event.request.destination === 'document') {
-        return caches.match('./index.html');
-      }
-    })
-  );
 });
   event.respondWith(
     caches.match(event.request).then(cached => {
