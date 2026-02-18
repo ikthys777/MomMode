@@ -501,6 +501,1578 @@ function MomMode() {
       })()}
       <input ref={fileInputRef} type="file" accept=".json,application/json,*/*" style={{ display: "none" }} onChange={importData} />
       <label style={{ ...settingsLabel, marginTop: "24px" }}>AI Provider</label>
+      <div style={{ display: "flex", marginBottom: "16px", borderRadius: "10px", overflow: "hidden", border: "1.5px solid #444", background: "#111" }}>
+        <div onClick={() => { setAiProvider("claude"); store.set("mm-ai-provider", "claude"); }} style={{ flex: 1, padding: "12px", textAlign: "center", fontFamily: QS, fontSize: "14px", fontWeight: 700, cursor: "pointer", background: aiProvider === "claude" ? "#BB86FC" : "transparent", color: aiProvider === "claude" ? "#000" : "#666" }}>Claude</div>
+        <div onClick={() => { setAiProvider("grok"); store.set("mm-ai-provider", "grok"); }} style={{ flex: 1, padding: "12px", textAlign: "center", fontFamily: QS, fontSize: "14px", fontWeight: 700, cursor: "pointer", background: aiProvider === "grok" ? "#BB86FC" : "transparent", color: aiProvider === "grok" ? "#000" : "#666" }}>Grok</div>
+      </div>
+      {aiProvider === "claude" ? <>
+        <label style={{ ...settingsLabel, fontSize: "12px" }}>Claude API Key</label>
+        <p style={{ fontFamily: QS, fontSize: "11px", color: "#555", margin: "0 0 8px" }}>From console.anthropic.com</p>
+        <input value={apiKeyInput} onChange={e => setApiKeyInput(e.target.value)} placeholder="sk-ant-..." style={{ ...inputStyle, fontSize: "14px", marginBottom: "10px" }} />
+        <div style={{ display: "flex", gap: "10px", marginBottom: "8px" }}>
+          {apiKey && <button onClick={() => { setApiKey(""); setApiKeyInput(""); store.set("mm-api-key", ""); showToast("Claude key removed"); }} style={{ ...primaryBtn, background: "none", border: "1.5px solid #444", color: "#FF6B6B", flex: 1, padding: "12px" }}>Remove</button>}
+          <button onClick={() => { const t = apiKeyInput.trim(); setApiKey(t); store.set("mm-api-key", t); showToast(t ? "Claude key saved" : "Key cleared"); }} style={{ ...primaryBtn, flex: 1, padding: "12px" }}>Save</button>
+        </div>
+      </> : <>
+        <label style={{ ...settingsLabel, fontSize: "12px" }}>Grok API Key</label>
+        <p style={{ fontFamily: QS, fontSize: "11px", color: "#555", margin: "0 0 8px" }}>From console.x.ai</p>
+        <input value={grokKeyInput} onChange={e => setGrokKeyInput(e.target.value)} placeholder="xai-..." style={{ ...inputStyle, fontSize: "14px", marginBottom: "10px" }} />
+        <div style={{ display: "flex", gap: "10px", marginBottom: "8px" }}>
+          {grokKey && <button onClick={() => { setGrokKey(""); setGrokKeyInput(""); store.set("mm-grok-key", ""); showToast("Grok key removed"); }} style={{ ...primaryBtn, background: "none", border: "1.5px solid #444", color: "#FF6B6B", flex: 1, padding: "12px" }}>Remove</button>}
+          <button onClick={() => { const t = grokKeyInput.trim(); setGrokKey(t); store.set("mm-grok-key", t); showToast(t ? "Grok key saved" : "Key cleared"); }} style={{ ...primaryBtn, flex: 1, padding: "12px" }}>Save</button>
+        </div>
+      </>}
+      <label style={{ ...settingsLabel, marginTop: "24px" }}>Grocery Sync</label>
+      <p style={{ fontFamily: QS, fontSize: "11px", color: "#555", margin: "0 0 10px" }}>Sync grocery list between Mom Mode & Dad Does in real time.</p>
+      <input value={supaUrl} onChange={e => setSupaUrl(e.target.value)} placeholder="https://xxxxx.supabase.co" style={{ ...inputStyle, fontSize: "13px", marginBottom: "8px" }} />
+      <input value={supaKey} onChange={e => setSupaKey(e.target.value)} placeholder="Supabase anon key (eyJ...)" style={{ ...inputStyle, fontSize: "13px", marginBottom: "8px" }} />
+      <input value={familyCode} onChange={e => setFamilyCode(e.target.value)} placeholder="Family code (e.g. ALIFF-2026)" style={{ ...inputStyle, fontSize: "13px", marginBottom: "10px" }} />
+      <div style={{ display: "flex", gap: "10px", marginBottom: "8px" }}>
+        {syncConfigured && <button onClick={() => { setSupaUrl(""); setSupaKey(""); setFamilyCode(""); store.set("mm-supa-url",""); store.set("mm-supa-key",""); store.set("mm-family-code",""); setSyncStatus(""); showToast("Sync disconnected"); }} style={{ ...primaryBtn, background: "none", border: "1.5px solid #444", color: "#FF6B6B", flex: 1, padding: "12px" }}>Disconnect</button>}
+        <button onClick={() => { store.set("mm-supa-url", supaUrl.trim()); store.set("mm-supa-key", supaKey.trim()); store.set("mm-family-code", familyCode.trim()); if (supaUrl && supaKey && familyCode) { pushGrocery(groceryItems); showToast("Sync connected!"); } else { showToast("Fill all fields to enable sync"); } }} style={{ ...primaryBtn, flex: 1, padding: "12px" }}>Connect</button>
+      </div>
+      {syncConfigured && <p style={{ fontFamily: QS, fontSize: "11px", color: syncStatus === "error" ? "#FF6B6B" : "#BB86FC", margin: "0 0 4px", textAlign: "center" }}>{syncStatus === "synced" ? "✓ Connected & synced" : syncStatus === "error" ? "✗ Sync error — check credentials" : "Connecting..."}</p>}
+    </div>
+  );
+
+  // ─── Export / Import ─────────────────────────────────────────
+  const doExport = () => {
+    const data = { momModeBackup: true, version: 1, notes, recipes, groceryItems, mealPlan, clockStyle, clockColor, noteSort, recipeSort, showGroceryCats, exportDate: new Date().toISOString() };
+    const jsonStr = JSON.stringify(data, null, 2);
+    const name = `mom-mode-backup-${new Date().toISOString().slice(0,10)}.json`;
+    try {
+      const blob = new Blob([jsonStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = name; a.style.display = "none";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch { setExportDataStr(jsonStr); }
+  };
+
+  const copyExportData = async () => {
+    try { await navigator.clipboard.writeText(exportDataStr); showToast("Copied to clipboard!"); }
+    catch { showToast("Long press the text to select & copy"); }
+  };
+
+  const importData = async (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      
+      // Validate it's a Mom Mode backup
+      if (data.manifest_version || data.start_url || data.short_name) {
+        showToast("That's a web manifest, not a Mom Mode backup");
+        e.target.value = "";
+        return;
+      }
+      if (!data.momModeBackup && !data.notes && !data.recipes && !data.groceryItems && !data.clockStyle) {
+        showToast("Not a valid Mom Mode backup file");
+        e.target.value = "";
+        return;
+      }
+      
+      // Count what we found
+      const found = [];
+      if (data.notes?.length) found.push(`${data.notes.length} notes`);
+      if (data.recipes?.length) found.push(`${data.recipes.length} recipes`);
+      if (data.groceryItems?.length) found.push(`${data.groceryItems.length} grocery items`);
+      if (data.mealPlan && Object.keys(data.mealPlan).length) found.push("meal plan");
+      if (data.clockStyle) found.push("clock settings");
+      const summary = found.length ? found.join(", ") : "empty backup";
+      
+      // Store file data before resetting input
+      const importPayload = { ...data };
+      e.target.value = "";
+      
+      confirmDelete(`Restore backup? Found: ${summary}. This will replace your current data.`, async () => {
+        if (Array.isArray(importPayload.notes)) { setNotes(importPayload.notes); await store.set("mm-notes", importPayload.notes); }
+        if (Array.isArray(importPayload.recipes)) { setRecipes(importPayload.recipes); await store.set("mm-recipes", importPayload.recipes); }
+        if (Array.isArray(importPayload.groceryItems)) { setGroceryItems(importPayload.groceryItems); await store.set("mm-grocery", importPayload.groceryItems); }
+        if (importPayload.clockStyle) { setClockStyle(importPayload.clockStyle); await store.set("mm-clock-style", importPayload.clockStyle); }
+        if (importPayload.clockColor) { setClockColor(importPayload.clockColor); await store.set("mm-clock-color", importPayload.clockColor); }
+        if (importPayload.noteSort) { setNoteSort(importPayload.noteSort); await store.set("mm-note-sort", importPayload.noteSort); }
+        if (importPayload.recipeSort) { setRecipeSort(importPayload.recipeSort); await store.set("mm-recipe-sort", importPayload.recipeSort); }
+        if (importPayload.showGroceryCats !== undefined) { setShowGroceryCats(importPayload.showGroceryCats); await store.set("mm-show-grocery-cats", importPayload.showGroceryCats); }
+        if (importPayload.mealPlan) { setMealPlan(importPayload.mealPlan); await store.set("mm-meal-plan", importPayload.mealPlan); }
+        showToast("Backup restored!");
+      }, "Restore");
+    } catch {
+      showToast("Could not read file — is it valid JSON?");
+      e.target.value = "";
+    }
+  };
+
+  // ─── CRUD ────────────────────────────────────────────────────
+  const handleSaveNote = () => {
+    if (!noteTitle.trim() && !noteBody.trim() && noteChecklistItems.length === 0) return;
+    const noteData = { title: noteTitle, body: noteBody, color: noteColor, dueDate: noteDueDate, checklist: noteChecklist, checklistItems: noteChecklist ? noteChecklistItems : [], updated: Date.now() };
+    if (editId !== null) { saveNotes(notes.map(n => n.id === editId ? { ...n, ...noteData } : n)); }
+    else { saveNotes([{ id: Date.now(), ...noteData, created: Date.now(), pinned: false }, ...notes]); }
+    resetSubView();
+  };
+  const deleteNote = (id) => saveNotes(notes.filter(n => n.id !== id));
+  const togglePinNote = (id) => saveNotes(notes.map(n => n.id === id ? { ...n, pinned: !n.pinned } : n));
+  const openEditNote = (note) => { setNoteTitle(note.title); setNoteBody(note.body); setNoteColor(note.color || null); setNoteDueDate(note.dueDate || ""); setNoteChecklist(note.checklist || false); setNoteChecklistItems(note.checklistItems || []); setEditId(note.id); setSubView("edit"); };
+
+  const toggleChecklistItem = (noteId, itemIdx) => {
+    saveNotes(notes.map(n => {
+      if (n.id !== noteId) return n;
+      const items = [...(n.checklistItems || [])];
+      items[itemIdx] = { ...items[itemIdx], checked: !items[itemIdx].checked };
+      return { ...n, checklistItems: items };
+    }));
+  };
+
+  const addChecklistItem = () => {
+    if (!checklistInput.trim()) return;
+    setNoteChecklistItems([...noteChecklistItems, { text: checklistInput.trim(), checked: false }]);
+    setChecklistInput("");
+  };
+
+  const removeChecklistItem = (idx) => {
+    setNoteChecklistItems(noteChecklistItems.filter((_, i) => i !== idx));
+  };
+
+  const handleSaveRecipe = () => {
+    if (!recipeTitle.trim()) return;
+    if (editId !== null) { saveRecipes(recipes.map(r => r.id === editId ? { ...r, title: recipeTitle, url: recipeUrl, ingredients: recipeIngredients, instructions: recipeInstructions, category: recipeCategory, updated: Date.now() } : r)); }
+    else { saveRecipes([{ id: Date.now(), title: recipeTitle, url: recipeUrl, ingredients: recipeIngredients, instructions: recipeInstructions, category: recipeCategory, created: Date.now(), updated: Date.now(), pinned: false }, ...recipes]); }
+    resetSubView();
+  };
+  const deleteRecipe = (id) => saveRecipes(recipes.filter(r => r.id !== id));
+  const togglePinRecipe = (id) => saveRecipes(recipes.map(r => r.id === id ? { ...r, pinned: !r.pinned } : r));
+  const openEditRecipe = (r) => { setRecipeTitle(r.title); setRecipeUrl(r.url || ""); setRecipeIngredients(r.ingredients || ""); setRecipeInstructions(r.instructions || ""); setRecipeCategory(r.category || ""); setEditId(r.id); setSubView("edit"); };
+
+  // Recipe ingredients → grocery list (asks user about categories)
+  const addIngredientsToGrocery = (ingredientsText) => {
+    setPendingIngredients(ingredientsText);
+  };
+
+  const doSimpleAdd = (ingredientsText) => {
+    const lines = ingredientsText.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+    const existing = new Set(groceryItems.map(i => i.name.toLowerCase()));
+    const newItems = lines.filter(l => !existing.has(l.toLowerCase())).map((name, i) => ({ id: Date.now() + i, name, checked: false, category: "" }));
+    if (newItems.length === 0) { showToast("All ingredients already in list"); return; }
+    saveGrocery([...groceryItems, ...newItems]);
+    showToast(`Added ${newItems.length} item${newItems.length > 1 ? "s" : ""} to grocery list`);
+  };
+
+  const doSmartAdd = async (ingredientsText) => {
+    setGroceryConverting(true);
+    try {
+      const cats = GROCERY_CATEGORIES.join(", ");
+      const text = await callAI(
+        [{ role: "user", content: `Convert these recipe ingredients into a grocery list:\n\n${ingredientsText}` }],
+        null,
+        `You are a grocery list converter. Convert recipe ingredients into clean grocery items with store categories. Respond with ONLY a JSON array, no preamble, no markdown. Each item: {"name": "Item name - quantity", "category": "Category"}. Valid categories: ${cats}. Clean up ingredient names (remove prep instructions like "sifted", "diced"). Keep quantities.`,
+        apiKey ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-20250514"
+      );
+      const parsed = extractJSON(text);
+      const items = Array.isArray(parsed) ? parsed : [];
+      const existing = new Set(groceryItems.map(i => i.name.toLowerCase()));
+      const newItems = items.filter(p => !existing.has(p.name.toLowerCase())).map((p, i) => ({ id: Date.now() + i, name: p.name, checked: false, category: p.category || "" }));
+      if (newItems.length === 0) { showToast("All ingredients already in list"); }
+      else { saveGrocery([...groceryItems, ...newItems]); showToast(`Added ${newItems.length} item${newItems.length > 1 ? "s" : ""} with categories`); }
+    } catch (err) {
+      if (err.message === "OFFLINE") { setShowOffline(true); }
+      else { console.error("Smart add error:", err); showToast("AI failed, adding items as-is"); doSimpleAdd(ingredientsText); }
+    }
+    setGroceryConverting(false);
+  };
+
+  // Long press to set category on grocery item
+  const longPressTimerRef = useRef(null);
+  const handleGroceryLongPressStart = (item) => {
+    longPressTimerRef.current = setTimeout(() => { setLongPressItem(item); }, 500);
+  };
+  const handleGroceryLongPressEnd = () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+  };
+  const setGroceryItemCategory = (id, category) => {
+    saveGrocery(groceryItems.map(i => i.id === id ? { ...i, category } : i));
+    setLongPressItem(null);
+    showToast(`Category: ${category}`);
+  };
+
+  // API helper - works in Claude preview (no key) and standalone (with key)
+  const callClaude = async (messages, tools, system, model) => {
+    if (!navigator.onLine) throw new Error("OFFLINE");
+    const headers = { "Content-Type": "application/json" };
+    if (apiKey) {
+      headers["x-api-key"] = apiKey;
+      headers["anthropic-version"] = "2023-06-01";
+      headers["anthropic-dangerous-direct-browser-access"] = "true";
+    }
+    const body = { model: model || "claude-sonnet-4-20250514", max_tokens: 1500, messages };
+    if (tools) body.tools = tools;
+    if (system) body.system = system;
+    const resp = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers, body: JSON.stringify(body) });
+    if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error?.message || `API error ${resp.status}`); }
+    const data = await resp.json();
+    return data.content.map(i => i.type === "text" ? i.text : "").filter(Boolean).join("\n");
+  };
+
+  const callGrok = async (messages, useSearch, system) => {
+    if (!navigator.onLine) throw new Error("OFFLINE");
+    if (!grokKey) throw new Error("No Grok API key set");
+    const headers = { "Content-Type": "application/json", "Authorization": `Bearer ${grokKey}` };
+    const body = { model: "grok-3-mini-fast", max_tokens: 1500, messages: [] };
+    if (system) body.messages.push({ role: "system", content: system });
+    body.messages.push(...messages);
+    if (useSearch) body.search_parameters = { mode: "auto", sources: [{ type: "web" }] };
+    const resp = await fetch("https://api.x.ai/v1/chat/completions", { method: "POST", headers, body: JSON.stringify(body) });
+    if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error?.message || `Grok API error ${resp.status}`); }
+    const data = await resp.json();
+    return data.choices?.[0]?.message?.content || "";
+  };
+
+  const callAI = async (messages, tools, system, model) => {
+    if (aiProvider === "grok" && grokKey) {
+      const useSearch = !!(tools && tools.some(t => t.name === "web_search" || t.type === "web_search_20250305"));
+      return callGrok(messages, useSearch, system);
+    }
+    return callClaude(messages, tools, system, model);
+  };
+
+  // Extract JSON object or array from text that may contain conversational prose
+  const extractJSON = (text) => {
+    // Try direct parse first
+    const cleaned = text.replace(/```json|```/g, "").trim();
+    try { return JSON.parse(cleaned); } catch {}
+    // Find first { or [ and match to its closing bracket
+    for (const [open, close] of [["{", "}"], ["[", "]"]]) {
+      const start = cleaned.indexOf(open);
+      if (start === -1) continue;
+      let depth = 0;
+      for (let i = start; i < cleaned.length; i++) {
+        if (cleaned[i] === open) depth++;
+        if (cleaned[i] === close) depth--;
+        if (depth === 0) {
+          try { return JSON.parse(cleaned.slice(start, i + 1)); } catch { break; }
+        }
+      }
+    }
+    throw new Error("No valid JSON found in response");
+  };
+
+  const extractRecipe = async () => {
+    if (!recipeUrl.trim()) return;
+    setExtracting(true); setExtractError("");
+    try {
+      // Single call: search + extract + return JSON in one step, using Haiku for speed/cost
+      const rawText = await callAI(
+        [{ role: "user", content: `Find and extract the recipe from: ${recipeUrl.trim()}\nReturn ONLY a JSON object with keys: title, ingredients, instructions. No markdown, no explanation.` }],
+        [{ type: "web_search_20250305", name: "web_search" }],
+        `You extract recipes from URLs. Search the URL. Return ONLY raw JSON: {"title":"...","ingredients":"item1\\nitem2","instructions":"1. Step one\\n2. Step two"}. Each ingredient on its own line. Number each step. No other text.`,
+        apiKey ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-20250514"
+      );
+      
+      let parsed;
+      try {
+        parsed = extractJSON(rawText);
+      } catch {
+        // Fallback: if web search returned prose, convert to JSON with a small fast call
+        const jsonText = await callAI(
+          [{ role: "user", content: `Convert to JSON: {"title":"...","ingredients":"...","instructions":"..."}\n\n${rawText.slice(0, 4000)}` }],
+          null,
+          `Return ONLY raw JSON. No markdown. No explanation.`,
+          apiKey ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-20250514"
+        );
+        parsed = extractJSON(jsonText);
+      }
+      
+      if (parsed.title) setRecipeTitle(parsed.title);
+      if (parsed.ingredients) setRecipeIngredients(parsed.ingredients);
+      if (parsed.instructions) setRecipeInstructions(parsed.instructions);
+    } catch (err) {
+      if (err.message === "OFFLINE") { setShowOffline(true); } else { setExtractError(err.message || "Couldn't extract. Try pasting manually."); }
+    }
+    setExtracting(false);
+  };
+
+  const addGroceryItem = () => { if (!groceryInput.trim()) return; saveGrocery([...groceryItems, { id: Date.now(), name: groceryInput.trim(), checked: false, category: "" }]); setGroceryInput(""); };
+  const toggleGrocery = (id) => saveGrocery(groceryItems.map(i => i.id === id ? { ...i, checked: !i.checked } : i));
+  const deleteGroceryItem = (id) => { const snapshot = [...groceryItems]; saveGrocery(groceryItems.filter(i => i.id !== id)); triggerUndo("Item deleted", () => saveGrocery(snapshot)); };
+  const clearCompleted = () => saveGrocery(groceryItems.filter(i => !i.checked));
+  const checkedCount = groceryItems.filter(i => i.checked).length;
+
+  const [shareFormatPicker, setShareFormatPicker] = useState(false);
+
+  const buildGroceryText = (format) => {
+    const unchecked = groceryItems.filter(i => !i.checked);
+    const hasCats = unchecked.some(i => i.category);
+    let text = "Grocery List\n" + "=".repeat(30) + "\n";
+    
+    if (hasCats) {
+      const grouped = {};
+      unchecked.forEach(item => {
+        const cat = item.category || "Other";
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(item.name);
+      });
+      Object.keys(grouped).forEach(cat => {
+        text += `\n${cat.toUpperCase()}\n`;
+        grouped[cat].forEach(name => { text += format === "numbered" ? `  ${grouped[cat].indexOf(name) + 1}. ${name}\n` : `  - ${name}\n`; });
+      });
+    } else {
+      text += "\n";
+      unchecked.forEach((item, i) => { text += format === "numbered" ? `${i + 1}. ${item.name}\n` : `- ${item.name}\n`; });
+    }
+    
+    text += `\n${unchecked.length} item${unchecked.length > 1 ? "s" : ""} total`;
+    return text;
+  };
+
+  const doShareGrocery = async (format) => {
+    setShareFormatPicker(false);
+    const unchecked = groceryItems.filter(i => !i.checked);
+    if (unchecked.length === 0) { showToast("Nothing to share"); return; }
+    const text = buildGroceryText(format);
+    
+    // Try native share first
+    if (navigator.share) {
+      try { await navigator.share({ title: "Grocery List", text }); return; }
+      catch (e) { if (e.name === "AbortError") return; }
+    }
+    // Try clipboard
+    try { await navigator.clipboard.writeText(text); showToast("List copied to clipboard!"); return; } catch {}
+    // Fallback: download as .txt
+    try {
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "grocery-list.txt"; a.style.display = "none";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch { showToast("Couldn't share"); }
+  };
+
+  let displayNotes = sortItems(filterItems(notes, noteSearch), noteSort);
+  let displayRecipes = sortItems(filterItems(recipes, recipeSearch), recipeSort);
+  if (recipeCatFilter) displayRecipes = displayRecipes.filter(r => r.category === recipeCatFilter);
+
+  // ─── Styles ──────────────────────────────────────────────────
+  const QS = "'Quicksand', sans-serif";
+  const iconBtnStyle = { background: "none", border: "none", cursor: "pointer", padding: "8px", display: "flex", alignItems: "center", justifyContent: "center" };
+  const settingsLabel = { fontFamily: QS, fontSize: "13px", fontWeight: 600, color: "#666", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: "12px", display: "block" };
+  const inputStyle = { width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: "12px", border: "1.5px solid #2a2a2a", background: "#111", color: "#eee", fontFamily: QS, fontSize: "16px", outline: "none" };
+  const textareaStyle = { ...inputStyle, minHeight: "120px", resize: "vertical", lineHeight: 1.6 };
+  const primaryBtn = { padding: "14px 28px", borderRadius: "12px", border: "none", background: "#BB86FC", color: "#fff", fontFamily: QS, fontSize: "16px", fontWeight: 600, cursor: "pointer", width: "100%" };
+  const cardStyle = { background: "#111", borderRadius: "14px", padding: "16px", border: "1px solid #1e1e1e", cursor: "pointer" };
+  const chipStyle = (active) => ({ padding: "6px 14px", borderRadius: "20px", border: `1.5px solid ${active ? "#BB86FC" : "#333"}`, background: active ? "#BB86FC15" : "transparent", color: active ? "#BB86FC" : "#888", fontFamily: QS, fontSize: "12px", fontWeight: active ? 600 : 400, cursor: "pointer", whiteSpace: "nowrap" });
+
+  const BackBtn = ({ onClick }) => (
+    <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", padding: "10px 20px 10px 10px", marginLeft: "-10px", borderRadius: "10px", background: "#1a1a1a" }}>
+      <ChevronLeft size={20} color="#BB86FC" style={{ pointerEvents: "none" }} />
+      <span style={{ fontFamily: QS, fontSize: "15px", color: "#BB86FC", fontWeight: 600, pointerEvents: "none" }}>Back</span>
+    </div>
+  );
+  const SortDrop = ({ sort, setSort, show, setShow }) => (
+    <div style={{ position: "relative" }}>
+      <div onClick={() => setShow(!show)} style={{ display: "flex", alignItems: "center", gap: "4px", cursor: "pointer", padding: "8px 12px", borderRadius: "8px", background: "#1a1a1a" }}>
+        <ArrowUpDown size={14} color="#888" style={{ pointerEvents: "none" }} />
+        <span style={{ fontFamily: QS, fontSize: "12px", color: "#888", pointerEvents: "none" }}>{SORT_OPTIONS.find(s => s.id === sort)?.label}</span>
+      </div>
+      {show && <div style={{ position: "absolute", top: "100%", right: 0, marginTop: "4px", zIndex: 50, background: "#1a1a1a", borderRadius: "10px", border: "1px solid #2a2a2a", overflow: "hidden", minWidth: "170px", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
+        {SORT_OPTIONS.map(s => <div key={s.id} onClick={() => { setSort(s.id); setShow(false); }} style={{ padding: "12px 16px", cursor: "pointer", background: sort === s.id ? "#BB86FC15" : "transparent", fontFamily: QS, fontSize: "14px", color: sort === s.id ? "#BB86FC" : "#ccc", fontWeight: sort === s.id ? 600 : 400 }}>{s.label}</div>)}
+      </div>}
+    </div>
+  );
+
+  // Due date helper
+  const formatDueDate = (d) => { if (!d) return null; const dt = new Date(d + "T00:00:00"); const now = new Date(); now.setHours(0,0,0,0); const diff = Math.floor((dt - now) / 86400000); const label = dt.toLocaleDateString("en-US", { month: "short", day: "numeric" }); if (diff < 0) return { label: `Overdue · ${label}`, color: "#FF6B6B" }; if (diff === 0) return { label: `Today`, color: "#FFB347" }; if (diff === 1) return { label: `Tomorrow`, color: "#FFD700" }; return { label, color: "#666" }; };
+
+  // ─── Meal Planner Helpers ─────────────────────────────────────
+  const saveMealPlan = (mp) => { setMealPlan(mp); store.set("mm-meal-plan", mp); };
+
+  const getWeekDays = (offset) => {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - ((today.getDay() + 6) % 7) + (offset * 7));
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday); d.setDate(monday.getDate() + i);
+      return d.toISOString().slice(0, 10);
+    });
+  };
+
+  const dayLabel = (dateStr) => {
+    const d = new Date(dateStr + "T00:00:00");
+    return { short: d.toLocaleDateString("en-US", { weekday: "short" }), day: d.getDate(), full: d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }) };
+  };
+
+  const weekLabel = (days) => {
+    const s = new Date(days[0] + "T00:00:00"); const e = new Date(days[6] + "T00:00:00");
+    if (s.getMonth() === e.getMonth()) return `${s.toLocaleDateString("en-US", { month: "long" })} ${s.getDate()}–${e.getDate()}`;
+    return `${s.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${e.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  };
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const assignMeal = (dateStr, recipeId) => {
+    const current = mealPlan[dateStr] || [];
+    if (current.includes(recipeId)) return;
+    saveMealPlan({ ...mealPlan, [dateStr]: [...current, recipeId] });
+  };
+
+  const removeMeal = (dateStr, recipeId) => {
+    const current = (mealPlan[dateStr] || []).filter(id => id !== recipeId);
+    const updated = { ...mealPlan };
+    if (current.length === 0) delete updated[dateStr]; else updated[dateStr] = current;
+    saveMealPlan(updated);
+  };
+
+  const generateWeekGroceryList = () => {
+    const days = getWeekDays(weekOffset);
+    const allIngredients = [];
+    days.forEach(dateStr => {
+      (mealPlan[dateStr] || []).forEach(recipeId => {
+        const recipe = recipes.find(r => r.id === recipeId);
+        if (recipe?.ingredients) allIngredients.push(recipe.ingredients);
+      });
+    });
+    if (allIngredients.length === 0) { showToast("No meals planned this week"); return; }
+    const combined = allIngredients.join("\n");
+    setPendingIngredients(combined);
+  };
+
+  // ─── Render Content ──────────────────────────────────────────
+  const renderContent = () => {
+    if (tab === "clock") return (
+      <div style={{ position: "relative", display: "flex", flexDirection: "column", flex: 1, background: "#000", overflow: "hidden" }}>
+        <button onClick={() => { setApiKeyInput(apiKey); setGrokKeyInput(grokKey); setShowClockSettings(true); }} style={{ position: "absolute", top: "16px", right: "16px", zIndex: 10, background: "rgba(255,255,255,0.06)", border: "none", borderRadius: "50%", width: "40px", height: "40px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Settings size={18} color="#555" /></button>
+        {renderClock()}{showClockSettings && renderClockSettings()}
+      </div>
+    );
+
+    // ── NOTES ──
+    if (tab === "notes") {
+      if (subView === "new" || subView === "edit") return (
+        <div style={{ flex: 1, padding: "20px", overflowY: "auto", WebkitOverflowScrolling: "touch", background: "#0a0a0a" }}>
+          <div style={{ display: "flex", alignItems: "center", marginBottom: "24px" }}>
+            <BackBtn onClick={resetSubView} />
+            <h2 style={{ fontFamily: QS, fontSize: "18px", fontWeight: 600, color: "#eee", margin: 0, marginLeft: "12px" }}>{subView === "edit" ? "Edit Note" : "New Note"}</h2>
+          </div>
+          <input value={noteTitle} onChange={e => setNoteTitle(e.target.value)} placeholder="Title" style={{ ...inputStyle, marginBottom: "12px", fontSize: "18px", fontWeight: 600 }} />
+          <div onClick={() => setNoteChecklist(!noteChecklist)} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 0", marginBottom: "8px", cursor: "pointer" }}>
+            {noteChecklist ? <CheckSquare size={18} color="#BB86FC" /> : <List size={18} color="#888" />}
+            <span style={{ fontFamily: QS, fontSize: "14px", color: noteChecklist ? "#BB86FC" : "#888", fontWeight: 500 }}>{noteChecklist ? "Checklist mode" : "Switch to checklist"}</span>
+          </div>
+          {noteChecklist ? (
+            <div style={{ marginBottom: "12px" }}>
+              {noteChecklistItems.map((item, idx) => (
+                <div key={idx} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 4px", borderBottom: "1px solid #1a1a1a" }}>
+                  <div onClick={() => { const items = [...noteChecklistItems]; items[idx] = { ...items[idx], checked: !items[idx].checked }; setNoteChecklistItems(items); }}
+                    style={{ width: "22px", height: "22px", borderRadius: "5px", border: `2px solid ${item.checked ? "#BB86FC" : "#555"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                    {item.checked && <span style={{ color: "#BB86FC", fontSize: "13px", fontWeight: 800 }}>✕</span>}
+                  </div>
+                  <span style={{ fontFamily: QS, fontSize: "15px", color: item.checked ? "#666" : "#eee", textDecoration: item.checked ? "line-through" : "none", flex: 1 }}>{item.text}</span>
+                  <div onClick={() => removeChecklistItem(idx)} style={{ padding: "4px", cursor: "pointer", opacity: 0.3 }}><X size={16} color="#888" /></div>
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
+                <input value={checklistInput} onChange={e => setChecklistInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addChecklistItem()} placeholder="Add item..." style={{ ...inputStyle, flex: 1, padding: "10px 14px", fontSize: "14px" }} />
+                <button onClick={addChecklistItem} style={{ background: "#BB86FC", border: "none", borderRadius: "10px", width: "40px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}><Plus size={18} color="#fff" /></button>
+              </div>
+            </div>
+          ) : (
+            <textarea value={noteBody} onChange={e => setNoteBody(e.target.value)} placeholder="Write your note..." style={{ ...textareaStyle, minHeight: "160px" }} />
+          )}
+          <label style={{ ...settingsLabel, marginTop: "16px" }}>Color Label</label>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
+            {NOTE_COLORS.map(c => <div key={c.name} onClick={() => setNoteColor(c.value)} style={{ width: "32px", height: "32px", borderRadius: "50%", border: `2.5px solid ${noteColor === c.value ? "#fff" : "transparent"}`, background: c.value || "#333", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{!c.value && <X size={14} color="#666" style={{ pointerEvents: "none" }} />}</div>)}
+          </div>
+          <label style={settingsLabel}>Due Date</label>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
+            <input type="date" value={noteDueDate} onChange={e => setNoteDueDate(e.target.value)} style={{ ...inputStyle, flex: 1, colorScheme: "dark" }} />
+            {noteDueDate && <div onClick={() => setNoteDueDate("")} style={{ padding: "8px", cursor: "pointer" }}><X size={18} color="#666" /></div>}
+          </div>
+          <button onClick={handleSaveNote} style={{ ...primaryBtn }}>Save Note</button>
+        </div>
+      );
+      if (subView === "view" && editId) { const note = notes.find(n => n.id === editId); if (!note) { resetSubView(); return null; }
+        const due = formatDueDate(note.dueDate);
+        return (
+        <div style={{ flex: 1, padding: "20px", overflowY: "auto", WebkitOverflowScrolling: "touch", background: "#0a0a0a" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
+            <BackBtn onClick={resetSubView} />
+            <div style={{ display: "flex", gap: "4px" }}>
+              <button onClick={() => togglePinNote(note.id)} style={iconBtnStyle}><Pin size={20} color={note.pinned ? "#BB86FC" : "#555"} fill={note.pinned ? "#BB86FC" : "none"} /></button>
+              <button onClick={() => openEditNote(note)} style={iconBtnStyle}><Edit3 size={20} color="#BB86FC" /></button>
+              <button onClick={() => confirmDelete("Delete this note?", () => { deleteNote(note.id); resetSubView(); })} style={iconBtnStyle}><Trash2 size={20} color="#FF6B6B" /></button>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+            {note.color && <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: note.color, flexShrink: 0 }} />}
+            <h2 style={{ fontFamily: QS, fontSize: "22px", fontWeight: 700, color: "#eee", margin: 0 }}>{note.title || "Untitled"}</h2>
+          </div>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", margin: "0 0 20px" }}>
+            <p style={{ fontFamily: QS, fontSize: "12px", color: "#555", margin: 0 }}>{new Date(note.updated).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+            {due && <span style={{ fontFamily: QS, fontSize: "12px", color: due.color, fontWeight: 600 }}>{due.label}</span>}
+          </div>
+          <p style={{ fontFamily: QS, fontSize: "16px", color: "#ccc", lineHeight: 1.7, whiteSpace: "pre-wrap", margin: 0 }}>{note.checklist && note.checklistItems?.length > 0 ? "" : note.body}</p>
+          {note.checklist && note.checklistItems?.length > 0 && (
+            <div>
+              {note.checklistItems.map((item, idx) => (
+                <div key={idx} onClick={() => toggleChecklistItem(note.id, idx)} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 4px", borderBottom: "1px solid #1a1a1a", cursor: "pointer" }}>
+                  <div style={{ width: "24px", height: "24px", borderRadius: "6px", border: `2px solid ${item.checked ? "#BB86FC" : "#555"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {item.checked && <span style={{ color: "#BB86FC", fontSize: "14px", fontWeight: 800 }}>✕</span>}
+                  </div>
+                  <span style={{ fontFamily: QS, fontSize: "16px", color: item.checked ? "#666" : "#eee", textDecoration: item.checked ? "line-through" : "none" }}>{item.text}</span>
+                </div>
+              ))}
+              <p style={{ fontFamily: QS, fontSize: "13px", color: "#555", margin: "12px 0 0" }}>
+                {note.checklistItems.filter(i => i.checked).length} of {note.checklistItems.length} completed
+              </p>
+            </div>
+          )}
+        </div>
+      ); }
+      return (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#0a0a0a", minHeight: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 20px 12px", flexShrink: 0 }}>
+            <h1 style={{ fontFamily: QS, fontSize: "28px", fontWeight: 700, color: "#eee", margin: 0 }}>Notes</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <SortDrop sort={noteSort} setSort={saveNoteSort} show={showNoteSort} setShow={setShowNoteSort} />
+              <button onClick={() => setSubView("new")} style={{ background: "#BB86FC", border: "none", borderRadius: "50%", width: "42px", height: "42px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 4px 16px #BB86FC44" }}><Plus size={22} color="#fff" /></button>
+            </div>
+          </div>
+          <SearchBar value={noteSearch} onChange={setNoteSearch} placeholder="Search notes..." />
+          <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "0 20px 20px", minHeight: 0 }}>
+            {displayNotes.length === 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 20px", opacity: 0.4 }}>
+                <StickyNote size={48} color="#555" />
+                <p style={{ fontFamily: QS, color: "#555", marginTop: "16px" }}>{noteSearch ? "No matching notes" : "No notes yet. Tap + to create one!"}</p>
+              </div>
+            ) : displayNotes.map(n => {
+              const due = formatDueDate(n.dueDate);
+              return (
+              <SwipeableItem key={n.id} onDelete={() => { const snapshot = [...notes]; deleteNote(n.id); triggerUndo("Note deleted", () => saveNotes(snapshot)); }}>
+                <div onClick={() => { setEditId(n.id); setSubView("view"); }} style={{ ...cardStyle, marginBottom: "0", borderLeft: n.color ? `3px solid ${n.color}` : n.pinned ? "3px solid #BB86FC" : "1px solid #1e1e1e", borderRadius: 0, borderBottom: "1px solid #1a1a1a", padding: "14px 16px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    {n.pinned && <Pin size={12} color="#BB86FC" fill="#BB86FC" style={{ flexShrink: 0 }} />}
+                    <h3 style={{ fontFamily: QS, fontSize: "15px", fontWeight: 600, color: "#eee", margin: 0, flex: 1 }}>{n.title || "Untitled"}</h3>
+                    {due && <span style={{ fontFamily: QS, fontSize: "11px", color: due.color, fontWeight: 500, flexShrink: 0 }}>{due.label}</span>}
+                  </div>
+                  <p style={{ fontFamily: QS, fontSize: "13px", color: "#666", margin: "4px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {n.checklist && n.checklistItems?.length > 0
+                      ? `☑ ${n.checklistItems.filter(i => i.checked).length}/${n.checklistItems.length} — ${n.checklistItems.filter(i => !i.checked).map(i => i.text).join(", ") || "All done!"}`
+                      : (n.body || "No content")}
+                  </p>
+                </div>
+              </SwipeableItem>
+            );})}
+          </div>
+        </div>
+      );
+    }
+
+    // ── RECIPES ──
+    if (tab === "recipes") {
+      if (subView === "new" || subView === "edit") return (
+        <div style={{ flex: 1, padding: "20px", overflowY: "auto", WebkitOverflowScrolling: "touch", background: "#0a0a0a" }}>
+          <div style={{ display: "flex", alignItems: "center", marginBottom: "24px" }}>
+            <BackBtn onClick={resetSubView} />
+            <h2 style={{ fontFamily: QS, fontSize: "18px", fontWeight: 600, color: "#eee", margin: 0, marginLeft: "12px" }}>{subView === "edit" ? "Edit Recipe" : "New Recipe"}</h2>
+          </div>
+          <input value={recipeTitle} onChange={e => setRecipeTitle(e.target.value)} placeholder="Recipe name" style={{ ...inputStyle, marginBottom: "12px", fontSize: "18px", fontWeight: 600 }} />
+          <label style={settingsLabel}>Category</label>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px" }}>
+            {RECIPE_CATEGORIES.map(c => <div key={c} onClick={() => setRecipeCategory(recipeCategory === c ? "" : c)} style={chipStyle(recipeCategory === c)}>{c}</div>)}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+            <Link size={16} color="#666" style={{ flexShrink: 0 }} />
+            <input value={recipeUrl} onChange={e => setRecipeUrl(e.target.value)} placeholder="Paste recipe URL..." style={{ ...inputStyle }} />
+            <div onClick={!extracting ? extractRecipe : undefined} style={{ padding: "12px 18px", borderRadius: "12px", flexShrink: 0, background: extracting ? "#333" : "#BB86FC", cursor: extracting ? "default" : "pointer", opacity: extracting ? 0.7 : 1 }}>
+              <span style={{ fontFamily: QS, fontSize: "14px", color: extracting ? "#aaa" : "#fff", fontWeight: 600, pointerEvents: "none", ...(extracting ? { animation: "pulse 1.5s ease infinite" } : {}) }}>{extracting ? "..." : "Extract"}</span>
+            </div>
+          </div>
+          {extractError && <p style={{ fontFamily: QS, fontSize: "13px", color: "#FF6B6B", margin: "4px 0 8px 24px" }}>{extractError}</p>}
+          {!extractError && <p style={{ fontFamily: QS, fontSize: "12px", color: "#555", margin: "4px 0 8px 24px" }}>Paste a recipe URL and tap Extract to auto-fill</p>}
+          <label style={{ ...settingsLabel, marginTop: "8px" }}>Ingredients</label>
+          <textarea value={recipeIngredients} onChange={e => setRecipeIngredients(e.target.value)} placeholder="List ingredients, one per line..." style={{ ...textareaStyle, minHeight: "100px" }} />
+          <label style={{ ...settingsLabel, marginTop: "16px" }}>Instructions</label>
+          <textarea value={recipeInstructions} onChange={e => setRecipeInstructions(e.target.value)} placeholder="Write cooking steps..." style={{ ...textareaStyle, minHeight: "140px" }} />
+          <button onClick={handleSaveRecipe} style={{ ...primaryBtn, marginTop: "20px" }}>Save Recipe</button>
+        </div>
+      );
+      if (subView === "view" && editId) { const recipe = recipes.find(r => r.id === editId); if (!recipe) { resetSubView(); return null; } return (
+        <div style={{ flex: 1, padding: "20px", overflowY: "auto", WebkitOverflowScrolling: "touch", background: "#0a0a0a" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
+            <BackBtn onClick={resetSubView} />
+            <div style={{ display: "flex", gap: "4px" }}>
+              <button onClick={() => togglePinRecipe(recipe.id)} style={iconBtnStyle}><Pin size={20} color={recipe.pinned ? "#BB86FC" : "#555"} fill={recipe.pinned ? "#BB86FC" : "none"} /></button>
+              <button onClick={() => openEditRecipe(recipe)} style={iconBtnStyle}><Edit3 size={20} color="#BB86FC" /></button>
+              <button onClick={() => confirmDelete("Delete this recipe?", () => { deleteRecipe(recipe.id); resetSubView(); })} style={iconBtnStyle}><Trash2 size={20} color="#FF6B6B" /></button>
+            </div>
+          </div>
+          <h2 style={{ fontFamily: QS, fontSize: "22px", fontWeight: 700, color: "#eee", margin: "0 0 8px" }}>{recipe.title}</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+            {recipe.category && <span style={chipStyle(true)}>{recipe.category}</span>}
+            {recipe.url && <a href={recipe.url} target="_blank" rel="noreferrer" style={{ fontFamily: QS, fontSize: "12px", color: "#64B5F6", textDecoration: "none" }} onClick={e => e.stopPropagation()}>View source ↗</a>}
+          </div>
+          {recipe.ingredients && <>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+              <h3 style={{ fontFamily: QS, fontSize: "15px", fontWeight: 600, color: "#BB86FC", margin: 0, textTransform: "uppercase", letterSpacing: "0.1em" }}>Ingredients</h3>
+              <div onClick={() => addIngredientsToGrocery(recipe.ingredients)} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 14px", borderRadius: "20px", background: "#BB86FC15", border: "1px solid #BB86FC44", cursor: "pointer" }}>
+                <ShoppingCart size={14} color="#BB86FC" style={{ pointerEvents: "none" }} />
+                <span style={{ fontFamily: QS, fontSize: "12px", color: "#BB86FC", fontWeight: 600, pointerEvents: "none" }}>Add to Grocery</span>
+              </div>
+            </div>
+            <p style={{ fontFamily: QS, fontSize: "15px", color: "#ccc", lineHeight: 1.8, whiteSpace: "pre-wrap", margin: "0 0 8px" }}>{recipe.ingredients}</p>
+          </>}
+          {recipe.instructions && <><h3 style={{ fontFamily: QS, fontSize: "15px", fontWeight: 600, color: "#BB86FC", margin: "24px 0 10px", textTransform: "uppercase", letterSpacing: "0.1em" }}>Instructions</h3><p style={{ fontFamily: QS, fontSize: "15px", color: "#ccc", lineHeight: 1.8, whiteSpace: "pre-wrap", margin: 0 }}>{recipe.instructions}</p></>}
+        </div>
+      ); }
+      // Recipe category filter
+      const usedCats = [...new Set(recipes.map(r => r.category).filter(Boolean))];
+      return (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#0a0a0a", position: "relative", minHeight: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 20px 12px", flexShrink: 0 }}>
+            <h1 style={{ fontFamily: QS, fontSize: "28px", fontWeight: 700, color: "#eee", margin: 0 }}>Recipes</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <SortDrop sort={recipeSort} setSort={saveRecipeSort} show={showRecipeSort} setShow={setShowRecipeSort} />
+              <button onClick={() => setSubView("new")} style={{ background: "#BB86FC", border: "none", borderRadius: "50%", width: "42px", height: "42px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 4px 16px #BB86FC44" }}><Plus size={22} color="#fff" /></button>
+            </div>
+          </div>
+          <SearchBar value={recipeSearch} onChange={setRecipeSearch} placeholder="Search recipes..." />
+          {usedCats.length > 0 && (
+            <div style={{ display: "flex", gap: "6px", padding: "0 20px 10px", overflowX: "auto", flexShrink: 0 }}>
+              <div onClick={() => setRecipeCatFilter("")} style={chipStyle(!recipeCatFilter)}>All</div>
+              {usedCats.map(c => <div key={c} onClick={() => setRecipeCatFilter(recipeCatFilter === c ? "" : c)} style={chipStyle(recipeCatFilter === c)}>{c}</div>)}
+            </div>
+          )}
+          <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "0 20px 20px", minHeight: 0 }}>
+            {displayRecipes.length === 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 20px", opacity: 0.4 }}>
+                <UtensilsCrossed size={48} color="#555" />
+                <p style={{ fontFamily: QS, color: "#555", marginTop: "16px" }}>{recipeSearch || recipeCatFilter ? "No matching recipes" : "No recipes yet. Tap + to add one!"}</p>
+              </div>
+            ) : displayRecipes.map(r => (
+              <SwipeableItem key={r.id} onDelete={() => { const snapshot = [...recipes]; deleteRecipe(r.id); triggerUndo("Recipe deleted", () => saveRecipes(snapshot)); }}>
+                <div onClick={() => { setEditId(r.id); setSubView("view"); }} style={{ ...cardStyle, marginBottom: "0", borderLeft: r.pinned ? "3px solid #BB86FC" : "1px solid #1e1e1e", borderRadius: 0, borderBottom: "1px solid #1a1a1a", padding: "14px 16px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {r.pinned && <Pin size={12} color="#BB86FC" fill="#BB86FC" style={{ flexShrink: 0 }} />}
+                    <UtensilsCrossed size={16} color="#BB86FC" style={{ flexShrink: 0 }} />
+                    <h3 style={{ fontFamily: QS, fontSize: "15px", fontWeight: 600, color: "#eee", margin: 0, flex: 1 }}>{r.title}</h3>
+                    {r.category && <span style={{ fontFamily: QS, fontSize: "11px", color: "#888", background: "#1a1a1a", padding: "3px 8px", borderRadius: "8px", flexShrink: 0 }}>{r.category}</span>}
+                  </div>
+                  {r.url && <p style={{ fontFamily: QS, fontSize: "12px", color: "#555", margin: "4px 0 0 24px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.url}</p>}
+                </div>
+              </SwipeableItem>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ── GROCERY ──
+    if (tab === "grocery") {
+      const renderGroceryItem = (item, checked) => (
+        <SwipeableItem key={item.id} onDelete={() => deleteGroceryItem(item.id)} onSwipeRight={() => toggleGrocery(item.id)} rightColor={checked ? "#BB86FC" : "#4CAF50"}>
+          <div style={{ position: "relative", borderBottom: "1px solid #1a1a1a", opacity: checked ? 0.4 : 1 }}>
+            <div
+              onClick={() => toggleGrocery(item.id)}
+              onTouchStart={() => handleGroceryLongPressStart(item)}
+              onTouchEnd={handleGroceryLongPressEnd}
+              onTouchMove={handleGroceryLongPressEnd}
+              style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 46px 12px 14px", cursor: "pointer", minHeight: "44px" }}>
+              {checked ? (
+                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", border: "2px solid #BB86FC", borderRadius: "5px", flexShrink: 0, pointerEvents: "none" }}>
+                  <span style={{ color: "#BB86FC", fontSize: "15px", fontWeight: 800, lineHeight: 1, pointerEvents: "none" }}>✕</span>
+                </span>
+              ) : (
+                <span style={{ display: "inline-block", width: "24px", height: "24px", border: "2px solid #555", borderRadius: "5px", flexShrink: 0, pointerEvents: "none" }} />
+              )}
+              <span style={{ fontFamily: QS, fontSize: "15px", color: checked ? "#888" : "#eee", fontWeight: checked ? 400 : 500, textDecoration: checked ? "line-through" : "none", pointerEvents: "none", flex: 1 }}>{item.name}</span>
+            </div>
+            <div onClick={() => deleteGroceryItem(item.id)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, display: "flex", alignItems: "center", padding: "0 12px", cursor: "pointer", opacity: 0.3, zIndex: 2 }}>
+              <Trash2 size={16} color="#666" style={{ pointerEvents: "none" }} />
+            </div>
+          </div>
+        </SwipeableItem>
+      );
+
+      const unchecked = groceryItems.filter(i => !i.checked);
+      const checked = groceryItems.filter(i => i.checked);
+
+      return (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#0a0a0a", minHeight: 0 }}>
+          <div style={{ padding: "20px 20px 12px", flexShrink: 0 }}>
+            <h1 style={{ fontFamily: QS, fontSize: "28px", fontWeight: 700, color: "#eee", margin: "0 0 12px", textAlign: "center" }}>Grocery List</h1>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", marginBottom: "14px" }}>
+              {groceryItems.filter(i => !i.checked).length > 0 && <div onClick={() => setShareFormatPicker(true)} style={{ padding: "4px 8px", borderRadius: "6px", background: "#BB86FC15", border: "1px solid #BB86FC44", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                <Share2 size={11} color="#BB86FC" style={{ pointerEvents: "none" }} />
+                <span style={{ fontFamily: QS, fontSize: "10px", color: "#BB86FC", fontWeight: 500, pointerEvents: "none" }}>Share</span>
+              </div>}
+              {groceryItems.length > 0 && <div onClick={() => confirmDelete(`Clear all ${groceryItems.length} item${groceryItems.length > 1 ? "s" : ""} from grocery list?`, () => saveGrocery([]), "Clear All")} style={{ padding: "4px 8px", borderRadius: "6px", background: "#1a1a1a", border: "1px solid #333", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                <Trash2 size={11} color="#FF6B6B" style={{ pointerEvents: "none" }} />
+                <span style={{ fontFamily: QS, fontSize: "10px", color: "#FF6B6B", fontWeight: 500, pointerEvents: "none" }}>Clear All</span>
+              </div>}
+              <div onClick={toggleGroceryCats} style={{ padding: "4px 8px", borderRadius: "6px", background: showGroceryCats ? "#BB86FC15" : "#1a1a1a", border: `1px solid ${showGroceryCats ? "#BB86FC" : "#333"}`, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                <Tag size={11} color={showGroceryCats ? "#BB86FC" : "#888"} style={{ pointerEvents: "none" }} />
+                <span style={{ fontFamily: QS, fontSize: "10px", color: showGroceryCats ? "#BB86FC" : "#888", fontWeight: 500, pointerEvents: "none" }}>Categories</span>
+              </div>
+              {checkedCount > 0 && <div onClick={() => confirmDelete(`Clear ${checkedCount} completed item${checkedCount > 1 ? "s" : ""}?`, clearCompleted, "Clear")} style={{ background: "none", border: "1.5px solid #444", borderRadius: "6px", padding: "4px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                <RotateCcw size={11} color="#FF6B6B" style={{ pointerEvents: "none" }} />
+                <span style={{ fontFamily: QS, fontSize: "10px", color: "#FF6B6B", fontWeight: 600, pointerEvents: "none" }}>Clear ({checkedCount})</span>
+              </div>}
+            </div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <input value={groceryInput} onChange={e => setGroceryInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addGroceryItem()} placeholder="Add item..." style={{ ...inputStyle, flex: 1, padding: "12px 16px" }} />
+              <button onClick={addGroceryItem} style={{ background: "#BB86FC", border: "none", borderRadius: "12px", width: "46px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, boxShadow: "0 4px 16px #BB86FC44" }}><Plus size={20} color="#fff" /></button>
+            </div>
+          </div>
+          {showGroceryCats && groceryItems.length > 0 && (
+            <div style={{ display: "flex", gap: "6px", padding: "0 20px 10px", flexWrap: "wrap", flexShrink: 0 }}>
+              <div onClick={() => setGroceryCatFilter("")} style={chipStyle(!groceryCatFilter)}>All</div>
+              {GROCERY_CATEGORIES.filter(cat => groceryItems.some(i => i.category === cat && !i.checked)).map(c => (
+                <div key={c} onClick={() => setGroceryCatFilter(groceryCatFilter === c ? "" : c)} style={chipStyle(groceryCatFilter === c)}>{c}</div>
+              ))}
+              {groceryItems.some(i => !i.category && !i.checked) && (
+                <div onClick={() => setGroceryCatFilter(groceryCatFilter === "__none" ? "" : "__none")} style={chipStyle(groceryCatFilter === "__none")}>Uncategorized</div>
+              )}
+            </div>
+          )}
+          <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "4px 12px 20px 20px", minHeight: 0 }}>
+            {groceryItems.length === 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 20px", opacity: 0.4 }}>
+                <ShoppingCart size={48} color="#555" />
+                <p style={{ fontFamily: QS, color: "#555", marginTop: "16px" }}>Your list is empty. Add some items!</p>
+                <p style={{ fontFamily: QS, color: "#444", marginTop: "8px", fontSize: "12px" }}>Tip: Long press an item to set its category</p>
+              </div>
+            ) : showGroceryCats ? (() => {
+              // Build ordered list of categories — selected filter first
+              const activeCats = GROCERY_CATEGORIES.filter(cat => unchecked.some(i => i.category === cat));
+              const hasUncategorized = unchecked.some(i => !i.category);
+              let orderedCats = [...activeCats];
+              if (groceryCatFilter && groceryCatFilter !== "__none") {
+                orderedCats = [groceryCatFilter, ...activeCats.filter(c => c !== groceryCatFilter)];
+              }
+              if (groceryCatFilter === "__none") {
+                // Show uncategorized first
+                return (<>
+                  {hasUncategorized && <div>
+                    <div style={{ fontFamily: QS, fontSize: "12px", fontWeight: 700, color: "#BB86FC", textTransform: "uppercase", letterSpacing: "0.15em", padding: "12px 4px 6px", borderBottom: "1px solid #1a1a1a" }}>Uncategorized</div>
+                    {unchecked.filter(i => !i.category).map(item => renderGroceryItem(item, false))}
+                  </div>}
+                  {orderedCats.map(cat => <div key={cat}>
+                    <div style={{ fontFamily: QS, fontSize: "12px", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.15em", padding: "12px 4px 6px", borderBottom: "1px solid #1a1a1a" }}>{cat}</div>
+                    {unchecked.filter(i => i.category === cat).map(item => renderGroceryItem(item, false))}
+                  </div>)}
+                  {checked.length > 0 && <><div style={{ fontFamily: QS, fontSize: "12px", fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: "0.15em", padding: "16px 4px 6px", borderBottom: "1px solid #1a1a1a" }}>Completed</div>{checked.map(item => renderGroceryItem(item, true))}</>}
+                </>);
+              }
+              return (<>
+                {orderedCats.map(cat => <div key={cat}>
+                  <div style={{ fontFamily: QS, fontSize: "12px", fontWeight: 700, color: groceryCatFilter === cat ? "#BB86FC" : "#888", textTransform: "uppercase", letterSpacing: "0.15em", padding: "12px 4px 6px", borderBottom: "1px solid #1a1a1a" }}>{cat}</div>
+                  {unchecked.filter(i => i.category === cat).map(item => renderGroceryItem(item, false))}
+                </div>)}
+                {hasUncategorized && <div>
+                  <div style={{ fontFamily: QS, fontSize: "12px", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.15em", padding: "12px 4px 6px", borderBottom: "1px solid #1a1a1a" }}>Uncategorized</div>
+                  {unchecked.filter(i => !i.category).map(item => renderGroceryItem(item, false))}
+                </div>}
+                {checked.length > 0 && <><div style={{ fontFamily: QS, fontSize: "12px", fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: "0.15em", padding: "16px 4px 6px", borderBottom: "1px solid #1a1a1a" }}>Completed</div>{checked.map(item => renderGroceryItem(item, true))}</>}
+              </>);
+            })() : (<>
+              {unchecked.map(item => renderGroceryItem(item, false))}
+              {checked.map(item => renderGroceryItem(item, true))}
+            </>)}
+          </div>
+        </div>
+      );
+    }
+
+    // ── MEALS ──
+    if (tab === "meals") {
+      const days = getWeekDays(weekOffset);
+      const wLabel = weekLabel(days);
+      const weekMealCount = days.reduce((sum, d) => sum + (mealPlan[d]?.length || 0), 0);
+
+      return (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#0a0a0a", minHeight: 0 }}>
+          <div style={{ padding: "20px 20px 12px", flexShrink: 0 }}>
+            <h1 style={{ fontFamily: QS, fontSize: "28px", fontWeight: 700, color: "#eee", margin: "0 0 14px", textAlign: "center" }}>Meal Planner</h1>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+              <div onClick={() => setWeekOffset(weekOffset - 1)} style={{ padding: "8px", cursor: "pointer", borderRadius: "8px", background: "#1a1a1a" }}>
+                <ChevronLeft size={20} color="#BB86FC" style={{ pointerEvents: "none" }} />
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <span style={{ fontFamily: QS, fontSize: "16px", fontWeight: 600, color: "#eee" }}>{wLabel}</span>
+                {weekOffset !== 0 && <div onClick={() => setWeekOffset(0)} style={{ fontFamily: QS, fontSize: "12px", color: "#BB86FC", cursor: "pointer", marginTop: "2px" }}>Back to this week</div>}
+              </div>
+              <div onClick={() => setWeekOffset(weekOffset + 1)} style={{ padding: "8px", cursor: "pointer", borderRadius: "8px", background: "#1a1a1a" }}>
+                <ChevronRight size={20} color="#BB86FC" style={{ pointerEvents: "none" }} />
+              </div>
+            </div>
+            {weekMealCount > 0 && (
+              <button onClick={generateWeekGroceryList} style={{ ...primaryBtn, padding: "10px", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                <ShoppingCart size={16} style={{ pointerEvents: "none" }} /> Generate Grocery List for This Week
+              </button>
+            )}
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "4px 20px 20px", minHeight: 0 }}>
+            {days.map(dateStr => {
+              const info = dayLabel(dateStr);
+              const isToday = dateStr === todayStr;
+              const meals = (mealPlan[dateStr] || []).map(id => recipes.find(r => r.id === id)).filter(Boolean);
+              return (
+                <div key={dateStr} style={{ marginBottom: "12px", borderRadius: "14px", border: `1.5px solid ${isToday ? "#BB86FC44" : "#1e1e1e"}`, background: isToday ? "#BB86FC08" : "#111", overflow: "hidden" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderBottom: meals.length > 0 ? "1px solid #1e1e1e" : "none" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: isToday ? "#BB86FC20" : "#1a1a1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <span style={{ fontFamily: QS, fontSize: "15px", fontWeight: 700, color: isToday ? "#BB86FC" : "#888" }}>{info.day}</span>
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: QS, fontSize: "14px", fontWeight: 600, color: isToday ? "#BB86FC" : "#eee" }}>{info.short}</div>
+                        {isToday && <div style={{ fontFamily: QS, fontSize: "10px", color: "#BB86FC", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em" }}>Today</div>}
+                      </div>
+                    </div>
+                    <div onClick={() => setMealPickerDay(dateStr)} style={{ padding: "6px 12px", borderRadius: "8px", background: "#BB86FC15", border: "1px solid #BB86FC44", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                      <Plus size={14} color="#BB86FC" style={{ pointerEvents: "none" }} />
+                      <span style={{ fontFamily: QS, fontSize: "12px", color: "#BB86FC", fontWeight: 600, pointerEvents: "none" }}>Add</span>
+                    </div>
+                  </div>
+                  {meals.map(recipe => (
+                    <div key={recipe.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #1a1a1a" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontFamily: QS, fontSize: "14px", color: "#eee", fontWeight: 500 }}>{recipe.title}</span>
+                        {recipe.category && <span style={{ fontFamily: QS, fontSize: "11px", color: "#888", marginLeft: "8px" }}>{recipe.category}</span>}
+                      </div>
+                      <div onClick={() => removeMeal(dateStr, recipe.id)} style={{ padding: "6px", cursor: "pointer", flexShrink: 0, opacity: 0.4 }}>
+                        <X size={16} color="#FF6B6B" style={{ pointerEvents: "none" }} />
+                      </div>
+                    </div>
+                  ))}
+                  {meals.length === 0 && (
+                    <div onClick={() => setMealPickerDay(dateStr)} style={{ padding: "8px 14px 12px", cursor: "pointer" }}>
+                      <span style={{ fontFamily: QS, fontSize: "13px", color: "#444", fontStyle: "italic" }}>No meals planned</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+  };
+
+  const tabs = [
+    { id: "clock", icon: Clock, label: "Clock" },
+    { id: "notes", icon: StickyNote, label: "Notes" },
+    { id: "recipes", icon: UtensilsCrossed, label: "Recipes" },
+    { id: "meals", icon: CalendarDays, label: "Meals" },
+    { id: "grocery", icon: ShoppingCart, label: "Grocery" },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", width: "100%", background: "#0a0a0a", overflow: "hidden", position: "relative", fontFamily: QS }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Quicksand:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+        * { -webkit-tap-highlight-color: transparent; user-select: none; box-sizing: border-box; }
+        html, body { overflow: hidden; height: 100%; }
+        input, textarea { user-select: auto; }
+        input:focus, textarea:focus { border-color: #BB86FC !important; outline: none; }
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.7); }
+        @keyframes flipTop { 0% { transform: rotateX(0deg); } 100% { transform: rotateX(-90deg); } }
+        @keyframes flipBottom { 0% { transform: rotateX(90deg); opacity: 0; } 50% { opacity: 1; } 100% { transform: rotateX(0deg); opacity: 1; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes splashFade { from { opacity: 1; } to { opacity: 0; } }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+      `}</style>
+
+      {/* Splash Screen */}
+      {showSplash && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "#0a0a0a", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", animation: splashFade ? "splashFade 0.7s ease forwards" : "none" }}>
+          <svg width="96" height="96" viewBox="0 0 80 80" style={{ marginBottom: "16px" }}>
+            <defs><radialGradient id="sc" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#8B5E3C"/><stop offset="60%" stopColor="#5D3A1A"/><stop offset="100%" stopColor="#3E2512"/></radialGradient></defs>
+            <g transform="translate(40,40)">
+              {[...Array(16)].map((_,i) => <ellipse key={`o${i}`} cx="0" cy="-24" rx="7" ry="14" fill="#DAA520" transform={`rotate(${i*22.5})`}/>)}
+              {[...Array(16)].map((_,i) => <ellipse key={`n${i}`} cx="0" cy="-18" rx="5.5" ry="11" fill="#FFD700" transform={`rotate(${i*22.5+11.25})`}/>)}
+              <circle cx="0" cy="0" r="13" fill="url(#sc)"/>
+              {[[-4,-5],[0,-5],[4,-5],[-6,0],[6,0],[-2,-2],[2,-2],[0,1],[-4,3],[4,3],[-1,5],[2,6],[0,8]].map(([x,y],i) => <circle key={`s${i}`} cx={x} cy={y} r="1.1" fill="#8B5E3C"/>)}
+            </g>
+          </svg>
+          <h1 style={{ fontFamily: QS, fontSize: "36px", fontWeight: 700, color: "#BB86FC", margin: "0 0 8px", letterSpacing: "0.05em" }}>Mom Mode</h1>
+          <p style={{ fontFamily: QS, fontSize: "14px", color: "#666", margin: 0, fontWeight: 300 }}>Made with love</p>
+        </div>
+      )}
+
+      {/* Toast */}
+      {/* Share format picker */}
+      {shareFormatPicker && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", animation: "fadeIn 0.15s ease" }}
+          onClick={() => setShareFormatPicker(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#1a1a1a", borderRadius: "16px", padding: "24px", maxWidth: "320px", width: "100%", border: "1px solid #2a2a2a" }}>
+            <h3 style={{ fontFamily: QS, fontSize: "16px", fontWeight: 600, color: "#eee", margin: "0 0 6px", textAlign: "center" }}>Share Grocery List</h3>
+            <p style={{ fontFamily: QS, fontSize: "13px", color: "#888", margin: "0 0 18px", textAlign: "center" }}>Choose a format</p>
+            <div onClick={() => doShareGrocery("bullets")} style={{ padding: "14px 16px", borderRadius: "12px", background: "#111", border: "1px solid #2a2a2a", cursor: "pointer", marginBottom: "10px" }}>
+              <span style={{ fontFamily: QS, fontSize: "15px", fontWeight: 600, color: "#eee" }}>Bullet list</span>
+              <p style={{ fontFamily: QS, fontSize: "12px", color: "#666", margin: "4px 0 0" }}>- Milk{"\n"}- Eggs{"\n"}- Bread</p>
+            </div>
+            <div onClick={() => doShareGrocery("numbered")} style={{ padding: "14px 16px", borderRadius: "12px", background: "#111", border: "1px solid #2a2a2a", cursor: "pointer" }}>
+              <span style={{ fontFamily: QS, fontSize: "15px", fontWeight: 600, color: "#eee" }}>Numbered list</span>
+              <p style={{ fontFamily: QS, fontSize: "12px", color: "#666", margin: "4px 0 0" }}>1. Milk{"\n"}2. Eggs{"\n"}3. Bread</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Meal recipe picker */}
+      {mealPickerDay && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "0", animation: "fadeIn 0.15s ease" }}
+          onClick={() => setMealPickerDay(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#1a1a1a", borderRadius: "20px 20px 0 0", padding: "20px", width: "100%", maxHeight: "70vh", display: "flex", flexDirection: "column", border: "1px solid #2a2a2a" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexShrink: 0 }}>
+              <div>
+                <h3 style={{ fontFamily: QS, fontSize: "16px", fontWeight: 600, color: "#eee", margin: 0 }}>Add Meal</h3>
+                <p style={{ fontFamily: QS, fontSize: "13px", color: "#888", margin: "2px 0 0" }}>{dayLabel(mealPickerDay).full}</p>
+              </div>
+              <div onClick={() => setMealPickerDay(null)} style={{ padding: "8px", cursor: "pointer" }}><X size={20} color="#888" style={{ pointerEvents: "none" }} /></div>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", minHeight: 0 }}>
+              {recipes.length === 0 ? (
+                <p style={{ fontFamily: QS, fontSize: "14px", color: "#555", textAlign: "center", padding: "32px 0" }}>No recipes saved yet. Add some in the Recipes tab!</p>
+              ) : recipes.map(recipe => {
+                const alreadyAdded = (mealPlan[mealPickerDay] || []).includes(recipe.id);
+                return (
+                  <div key={recipe.id} onClick={() => { if (!alreadyAdded) { assignMeal(mealPickerDay, recipe.id); } }}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 12px", borderBottom: "1px solid #222", cursor: alreadyAdded ? "default" : "pointer", opacity: alreadyAdded ? 0.4 : 1 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontFamily: QS, fontSize: "15px", color: "#eee", fontWeight: 500 }}>{recipe.title}</span>
+                      {recipe.category && <span style={{ fontFamily: QS, fontSize: "11px", color: "#888", marginLeft: "8px" }}>{recipe.category}</span>}
+                    </div>
+                    {alreadyAdded ? (
+                      <span style={{ fontFamily: QS, fontSize: "12px", color: "#BB86FC", fontWeight: 600, flexShrink: 0 }}>Added ✓</span>
+                    ) : (
+                      <Plus size={18} color="#BB86FC" style={{ flexShrink: 0 }} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toastMsg && (
+        <div style={{ position: "fixed", bottom: "100px", left: "50%", transform: "translateX(-50%)", zIndex: 300, background: "#333", color: "#fff", fontFamily: QS, fontSize: "14px", fontWeight: 500, padding: "10px 24px", borderRadius: "24px", boxShadow: "0 4px 20px rgba(0,0,0,0.5)", animation: "fadeIn 0.2s ease", whiteSpace: "nowrap" }}>
+          {toastMsg}
+        </div>
+      )}
+
+      {undoAction && !toastMsg && (
+        <div style={{ position: "fixed", bottom: "100px", left: "50%", transform: "translateX(-50%)", zIndex: 300, background: "#2a2a2a", fontFamily: QS, padding: "10px 16px", borderRadius: "24px", boxShadow: "0 4px 20px rgba(0,0,0,0.5)", animation: "fadeIn 0.2s ease", display: "flex", alignItems: "center", gap: "12px", whiteSpace: "nowrap" }}>
+          <span style={{ fontSize: "14px", color: "#ccc", fontWeight: 500 }}>{undoAction.label}</span>
+          <div onClick={doUndo} style={{ padding: "4px 14px", borderRadius: "16px", background: "#BB86FC", cursor: "pointer" }}>
+            <span style={{ fontSize: "13px", color: "#fff", fontWeight: 700 }}>UNDO</span>
+          </div>
+        </div>
+      )}
+
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>{renderContent()}</div>
+      {!(isLandscape && tab === "clock") && (
+        <div style={{ display: "flex", justifyContent: "space-around", alignItems: "center", padding: "8px 0 env(safe-area-inset-bottom, 12px)", background: "#0a0a0a", borderTop: "1px solid #1a1a1a", flexShrink: 0 }}>
+          {tabs.map(t => { const active = tab === t.id; const uncheckedCount = t.id === "grocery" ? groceryItems.filter(i => !i.checked).length : 0; return (
+            <button key={t.id} onClick={() => { setTab(t.id); resetSubView(); setShowNoteSort(false); setShowRecipeSort(false); }} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "6px 10px", opacity: active ? 1 : 0.4, position: "relative" }}>
+              <div style={{ position: "relative" }}>
+                <t.icon size={20} color={active ? "#BB86FC" : "#888"} strokeWidth={active ? 2.5 : 1.5} />
+                {uncheckedCount > 0 && <div style={{ position: "absolute", top: "-6px", right: "-10px", minWidth: "16px", height: "16px", borderRadius: "8px", background: "#BB86FC", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>
+                  <span style={{ fontFamily: QS, fontSize: "10px", fontWeight: 700, color: "#fff", lineHeight: 1 }}>{uncheckedCount}</span>
+                </div>}
+              </div>
+              <span style={{ fontFamily: QS, fontSize: "10px", color: active ? "#BB86FC" : "#888", fontWeight: active ? 700 : 500 }}>{t.label}</span>
+            </button>
+          ); })}
+        </div>
+      )}
+      {confirmAction && <ConfirmModal message={confirmAction.message} onConfirm={confirmAction.onConfirm} onCancel={() => setConfirmAction(null)} confirmLabel={confirmAction.confirmLabel} />}
+
+      {/* Export data copy fallback modal */}
+      {exportDataStr && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", animation: "fadeIn 0.15s ease" }}>
+          <div style={{ background: "#1a1a1a", borderRadius: "16px", padding: "20px", maxWidth: "360px", width: "100%", border: "1px solid #2a2a2a", maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <h3 style={{ fontFamily: QS, fontSize: "16px", fontWeight: 600, color: "#eee", margin: 0 }}>Backup Data</h3>
+              <div onClick={() => setExportDataStr("")} style={{ padding: "4px", cursor: "pointer" }}><X size={20} color="#888" style={{ pointerEvents: "none" }} /></div>
+            </div>
+            <p style={{ fontFamily: QS, fontSize: "12px", color: "#888", margin: "0 0 12px" }}>Copy this data and save it as a .json file for safekeeping.</p>
+            <textarea readOnly value={exportDataStr} style={{ width: "100%", boxSizing: "border-box", flex: 1, minHeight: "120px", padding: "12px", borderRadius: "10px", border: "1px solid #333", background: "#111", color: "#aaa", fontFamily: "monospace", fontSize: "11px", resize: "none", outline: "none", userSelect: "auto" }} onFocus={e => e.target.select()} />
+            <button onClick={copyExportData} style={{ ...primaryBtn, marginTop: "12px", padding: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+              Copy to Clipboard
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Pending ingredients → grocery choice modal */}
+      {pendingIngredients && !groceryConverting && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", animation: "fadeIn 0.15s ease" }}>
+          <div style={{ background: "#1a1a1a", borderRadius: "16px", padding: "24px", maxWidth: "320px", width: "100%", border: "1px solid #2a2a2a" }}>
+            <p style={{ fontFamily: QS, fontSize: "16px", color: "#eee", lineHeight: 1.6, margin: "0 0 8px", textAlign: "center", fontWeight: 600 }}>Add to Grocery List</p>
+            <p style={{ fontFamily: QS, fontSize: "13px", color: "#888", lineHeight: 1.5, margin: "0 0 20px", textAlign: "center" }}>
+              Use AI to clean up ingredient names and auto-assign store categories?
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <button onClick={() => { const text = pendingIngredients; setPendingIngredients(null); doSmartAdd(text); }} style={{ ...primaryBtn, padding: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                ✨ Smart Add with Categories
+              </button>
+              <button onClick={() => { const text = pendingIngredients; setPendingIngredients(null); doSimpleAdd(text); }} style={{ ...primaryBtn, padding: "12px", background: "#1a1a1a", border: "1.5px solid #333", color: "#ccc" }}>
+                Add as-is (no categories)
+              </button>
+              <button onClick={() => setPendingIngredients(null)} style={{ ...primaryBtn, padding: "12px", background: "none", border: "1.5px solid #333", color: "#888" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI converting indicator */}
+      {/* Offline dialog */}
+      {showOffline && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", animation: "fadeIn 0.15s ease" }}>
+          <div style={{ background: "#1a1a1a", borderRadius: "16px", padding: "28px 24px", maxWidth: "300px", width: "100%", border: "1px solid #2a2a2a", textAlign: "center" }}>
+            <div style={{ fontSize: "36px", marginBottom: "12px" }}>📡</div>
+            <h3 style={{ fontFamily: QS, fontSize: "18px", fontWeight: 700, color: "#eee", margin: "0 0 8px" }}>No Connection</h3>
+            <p style={{ fontFamily: QS, fontSize: "14px", color: "#888", margin: "0 0 20px", lineHeight: 1.5 }}>AI features need an internet connection. Check your Wi-Fi or data and try again.</p>
+            <p style={{ fontFamily: QS, fontSize: "13px", color: "#666", margin: "0 0 20px", lineHeight: 1.4 }}>You can still add items manually or paste ingredients without AI.</p>
+            <button onClick={() => setShowOffline(false)} style={{ ...primaryBtn, padding: "12px" }}>Got it</button>
+          </div>
+        </div>
+      )}
+
+      {/* AI Processing Overlay */}
+      {(extracting || groceryConverting) && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}>
+          <div style={{ background: "#1a1a1a", borderRadius: "20px", padding: "36px 32px", maxWidth: "300px", width: "100%", border: "1px solid #2a2a2a", textAlign: "center" }}>
+            <div style={{ width: "48px", height: "48px", border: "3px solid #333", borderTop: "3px solid #BB86FC", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 20px" }} />
+            <p style={{ fontFamily: QS, fontSize: "17px", color: "#eee", margin: "0 0 8px", fontWeight: 700 }}>
+              {extracting ? "Extracting Recipe..." : "Building Grocery List..."}
+            </p>
+            <p style={{ fontFamily: QS, fontSize: "13px", color: "#888", margin: "0 0 4px", lineHeight: 1.5 }}>
+              {extracting ? "AI is reading the recipe page" : "AI is organizing ingredients by category"}
+            </p>
+            <p style={{ fontFamily: QS, fontSize: "12px", color: "#555", margin: "12px 0 0", fontStyle: "italic" }}>
+              This may take a few seconds
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Long press category picker */}
+      {longPressItem && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "0 16px 32px", animation: "fadeIn 0.15s ease" }}
+          onClick={() => setLongPressItem(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#1a1a1a", borderRadius: "16px", padding: "20px", maxWidth: "360px", width: "100%", border: "1px solid #2a2a2a" }}>
+            <p style={{ fontFamily: QS, fontSize: "14px", color: "#888", margin: "0 0 4px" }}>Set category for:</p>
+            <p style={{ fontFamily: QS, fontSize: "16px", color: "#eee", margin: "0 0 16px", fontWeight: 600 }}>{longPressItem.name}</p>
+            {longPressItem.category && (
+              <div onClick={() => setGroceryItemCategory(longPressItem.id, "")} style={{ padding: "12px", borderRadius: "10px", marginBottom: "8px", background: "#FF6B6B15", border: "1px solid #FF6B6B44", cursor: "pointer", textAlign: "center" }}>
+                <span style={{ fontFamily: QS, fontSize: "14px", color: "#FF6B6B", fontWeight: 500 }}>Remove Category</span>
+              </div>
+            )}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {GROCERY_CATEGORIES.map(c => (
+                <div key={c} onClick={() => setGroceryItemCategory(longPressItem.id, c)} style={{
+                  padding: "10px 16px", borderRadius: "10px", cursor: "pointer",
+                  background: longPressItem.category === c ? "#BB86FC20" : "#111",
+                  border: `1.5px solid ${longPressItem.category === c ? "#BB86FC" : "#333"}`,
+                }}>
+                  <span style={{ fontFamily: QS, fontSize: "14px", color: longPressItem.category === c ? "#BB86FC" : "#ccc", fontWeight: longPressItem.category === c ? 600 : 400 }}>{c}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(MomMode));
+
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>const StickyNote = mkIcon('<path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M14 3v4a2 2 0 0 0 2 2h4"/>');
+const UtensilsCrossed = mkIcon('<path d="m16 2-2.3 2.3a3 3 0 0 0 0 4.2l1.8 1.8a3 3 0 0 0 4.2 0L22 8"/><path d="M15 15 3.3 3.3a4.2 4.2 0 0 0 0 6l7.3 7.3c1.7 1.7 4.3 1.7 6 0"/><path d="m2 22 5.5-1.5L21.17 6.83a2.82 2.82 0 0 0-4-4L3.5 16.5Z"/><path d="m18 16 4 4"/><path d="m17 21 5-5"/>');
+const ShoppingCart = mkIcon('<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>');
+const Settings = mkIcon('<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>');
+const Plus = mkIcon('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>');
+const Trash2 = mkIcon('<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>');
+const Check = mkIcon('<polyline points="20 6 9 17 4 12"/>');
+const ChevronLeft = mkIcon('<polyline points="15 18 9 12 15 6"/>');
+const ChevronRight = mkIcon('<polyline points="9 18 15 12 9 6"/>');
+const ChevronDown = mkIcon('<polyline points="6 9 12 15 18 9"/>');
+const Edit3 = mkIcon('<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>');
+const Link = mkIcon('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>');
+const FileText = mkIcon('<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/>');
+const X = mkIcon('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>');
+const RotateCcw = mkIcon('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>');
+const Search = mkIcon('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>');
+const Pin = mkIcon('<line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>');
+const ArrowUpDown = mkIcon('<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>');
+const Download = mkIcon('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>');
+const Upload = mkIcon('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>');
+const Tag = mkIcon('<path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/>');
+const Calendar = mkIcon('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>');
+const CalendarDays = mkIcon('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/>');
+const Circle = mkIcon('<circle cx="12" cy="12" r="10"/>');
+const Share2 = mkIcon('<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>');
+const CheckSquare = mkIcon('<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>');
+const List = mkIcon('<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>');
+
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── Storage Helper (hybrid: localStorage for large data, window.storage fallback) ──
+const store = {
+  async get(key) {
+    // Try localStorage first (larger capacity, synchronous, works offline)
+    try { const v = localStorage.getItem(key); if (v !== null) return JSON.parse(v); } catch {}
+    // Fall back to window.storage (persistent across sessions in preview)
+    try { const r = await window.storage.get(key); if (r) { const val = JSON.parse(r.value); try { localStorage.setItem(key, r.value); } catch {} return val; } } catch {}
+    return null;
+  },
+  async set(key, val) {
+    const json = JSON.stringify(val);
+    // Write to both for redundancy
+    try { localStorage.setItem(key, json); } catch {}
+    try { await window.storage.set(key, json); } catch {}
+  }
+};
+
+// ─── Constants ─────────────────────────────────────────────────────
+const CLOCK_COLORS = [
+  { name: "White", value: "#FFFFFF" }, { name: "Red", value: "#FF1744" }, { name: "Coral", value: "#FF6B6B" },
+  { name: "Orange", value: "#FF9100" }, { name: "Amber", value: "#FFBF00" }, { name: "Yellow", value: "#FFEA00" },
+  { name: "Mint", value: "#69F0AE" }, { name: "Green", value: "#00E676" }, { name: "Cyan", value: "#00E5FF" },
+  { name: "Sky", value: "#64B5F6" }, { name: "Blue", value: "#2979FF" }, { name: "Purple", value: "#BB86FC" },
+  { name: "Peach", value: "#FFab91" }, { name: "Pink", value: "#FF4081" },
+];
+const CLOCK_STYLES = [{ id: "classic", name: "Classic Digital" }, { id: "minimal", name: "Minimalist" }, { id: "flip", name: "Retro Flip" }];
+const SORT_OPTIONS = [
+  { id: "newest", label: "Newest First" }, { id: "oldest", label: "Oldest First" },
+  { id: "alpha", label: "A → Z" }, { id: "alpha-rev", label: "Z → A" }, { id: "updated", label: "Recently Updated" },
+];
+const NOTE_COLORS = [
+  { name: "None", value: null }, { name: "Red", value: "#FF6B6B" }, { name: "Orange", value: "#FFB347" },
+  { name: "Yellow", value: "#FFD700" }, { name: "Green", value: "#69F0AE" }, { name: "Blue", value: "#64B5F6" }, { name: "Purple", value: "#B388FF" },
+];
+const RECIPE_CATEGORIES = ["Breakfast", "Lunch", "Dinner", "Dessert", "Snack", "Side Dish", "Sauce", "Quick & Easy", "Slow Cooker"];
+const GROCERY_CATEGORIES = ["Produce", "Dairy & Eggs", "Meat & Seafood", "Bakery", "Frozen", "Pantry", "Beverages", "Snacks", "Household", "Other"];
+
+// ─── Flip Digit ────────────────────────────────────────────────────
+function FlipDigit({ digit, color, landscape }) {
+  const [curr, setCurr] = useState(digit);
+  const [prev, setPrev] = useState(digit);
+  const [flipping, setFlipping] = useState(false);
+  useEffect(() => {
+    if (digit !== curr) { setPrev(curr); setCurr(digit); setFlipping(true); const t = setTimeout(() => setFlipping(false), 500); return () => clearTimeout(t); }
+  }, [digit, curr]);
+  const w = landscape ? "min(10vw, 100px)" : "min(18vw, 90px)";
+  const h = landscape ? "min(52vh, 220px)" : "min(28vw, 140px)";
+  const fs = landscape ? "min(46vh, 14vw)" : "min(20vw, 100px)";
+  const cs = { position: "relative", width: w, height: h, perspective: "300px", margin: "0 2px" };
+  const fb = { position: "absolute", width: "100%", boxSizing: "border-box", height: "50%", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", backfaceVisibility: "hidden", borderRadius: "8px", background: "#1a1a1a", border: "1px solid #2a2a2a" };
+  const ds = { fontFamily: "'Share Tech Mono', monospace", fontSize: fs, fontWeight: 400, color, lineHeight: h };
+  return (
+    <div style={cs}>
+      <div style={{ ...fb, top: 0, borderBottom: "1px solid #000", alignItems: "flex-end" }}><span style={{ ...ds, transform: "translateY(50%)" }}>{curr}</span></div>
+      <div style={{ ...fb, bottom: 0, borderTop: "1px solid #333", alignItems: "flex-start" }}><span style={{ ...ds, transform: "translateY(-50%)" }}>{curr}</span></div>
+      {flipping && <div style={{ ...fb, top: 0, borderBottom: "1px solid #000", alignItems: "flex-end", transformOrigin: "bottom", zIndex: 2, animation: "flipTop 0.5s ease-in forwards" }}><span style={{ ...ds, transform: "translateY(50%)" }}>{prev}</span></div>}
+      {flipping && <div style={{ ...fb, bottom: 0, borderTop: "1px solid #333", alignItems: "flex-start", transformOrigin: "top", zIndex: 2, animation: "flipBottom 0.5s ease-out 0.25s forwards", opacity: 0 }}><span style={{ ...ds, transform: "translateY(-50%)" }}>{curr}</span></div>}
+    </div>
+  );
+}
+
+// ─── Swipeable Item ────────────────────────────────────────────────
+function SwipeableItem({ children, onDelete, onSwipeRight, rightColor }) {
+  const startX = useRef(0); const startY = useRef(0); const swiping = useRef(false); const direction = useRef(null); const [offset, setOffset] = useState(0);
+  const handleTouchStart = (e) => { startX.current = e.touches[0].clientX; startY.current = e.touches[0].clientY; swiping.current = true; direction.current = null; };
+  const handleTouchMove = (e) => {
+    if (!swiping.current) return;
+    const dx = e.touches[0].clientX - startX.current;
+    const dy = e.touches[0].clientY - startY.current;
+    // Lock direction on first significant movement
+    if (!direction.current) {
+      if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+        direction.current = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
+      }
+      return;
+    }
+    // If vertical, don't interfere — let the page scroll
+    if (direction.current === "v") return;
+    // Horizontal swipe
+    const diff = -dx;
+    if (diff > 0) setOffset(Math.min(diff, 90));
+    else if (diff < 0 && onSwipeRight) setOffset(Math.max(diff, -90));
+    else setOffset(0);
+  };
+  const handleTouchEnd = () => {
+    swiping.current = false;
+    if (offset > 50) setOffset(90);
+    else if (offset < -50 && onSwipeRight) { setOffset(0); onSwipeRight(); }
+    else setOffset(0);
+    direction.current = null;
+  };
+  return (
+    <div style={{ position: "relative", overflow: "hidden" }}>
+      <div style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: "90px", background: "#FF6B6B", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }} onClick={() => { setOffset(0); onDelete(); }}>
+        <Trash2 size={22} color="#fff" style={{ pointerEvents: "none" }} />
+      </div>
+      {onSwipeRight && <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: "90px", background: rightColor || "#4CAF50", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Check size={26} color="#fff" style={{ pointerEvents: "none" }} />
+      </div>}
+      <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
+        style={{ transform: `translateX(${-offset}px)`, transition: swiping.current ? "none" : "transform 0.25s ease", position: "relative", zIndex: 1, background: "#0a0a0a" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── Confirm Modal ─────────────────────────────────────────────────
+function ConfirmModal({ message, onConfirm, onCancel, confirmLabel }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", animation: "fadeIn 0.15s ease" }}>
+      <div style={{ background: "#1a1a1a", borderRadius: "16px", padding: "24px", maxWidth: "320px", width: "100%", border: "1px solid #2a2a2a" }}>
+        <p style={{ fontFamily: "'Quicksand', sans-serif", fontSize: "16px", color: "#eee", lineHeight: 1.6, margin: "0 0 24px", textAlign: "center" }}>{message}</p>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button onClick={onCancel} style={{ flex: 1, padding: "12px", borderRadius: "10px", border: "1.5px solid #333", background: "none", color: "#999", fontFamily: "'Quicksand', sans-serif", fontSize: "15px", fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+          <button onClick={onConfirm} style={{ flex: 1, padding: "12px", borderRadius: "10px", border: "none", background: "#FF6B6B", color: "#fff", fontFamily: "'Quicksand', sans-serif", fontSize: "15px", fontWeight: 600, cursor: "pointer" }}>{confirmLabel || "Delete"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Search Bar (outside main component to preserve focus) ─────
+const QS_FONT = "'Quicksand', sans-serif";
+function SearchBar({ value, onChange, placeholder }) {
+  return (
+    <div style={{ position: "relative", margin: "0 20px 12px", flexShrink: 0 }}>
+      <Search size={16} color="#555" style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+      <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ width: "100%", boxSizing: "border-box", padding: "11px 16px 11px 40px", borderRadius: "12px", border: "1.5px solid #2a2a2a", background: "#0f0f0f", color: "#eee", fontFamily: QS_FONT, fontSize: "14px", outline: "none" }} />
+      {value && <div onClick={() => onChange("")} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", cursor: "pointer", padding: "4px" }}><X size={16} color="#555" style={{ pointerEvents: "none" }} /></div>}
+    </div>
+  );
+}
+
+// ─── Main App ──────────────────────────────────────────────────────
+function MomMode() {
+  const [showSplash, setShowSplash] = useState(true);
+  const [splashFade, setSplashFade] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
+
+  const [tab, setTab] = useState("clock");
+  const [subView, setSubView] = useState(null);
+  const [editId, setEditId] = useState(null);
+
+  const [time, setTime] = useState(new Date());
+  const [clockStyle, setClockStyle] = useState("classic");
+  const [clockColor, setClockColor] = useState("#FFFFFF");
+  const [showClockSettings, setShowClockSettings] = useState(false);
+
+  const [notes, setNotes] = useState([]);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteBody, setNoteBody] = useState("");
+  const [noteColor, setNoteColor] = useState(null);
+  const [noteDueDate, setNoteDueDate] = useState("");
+  const [noteChecklist, setNoteChecklist] = useState(false);
+  const [noteChecklistItems, setNoteChecklistItems] = useState([]);
+  const [checklistInput, setChecklistInput] = useState("");
+  const [noteSearch, setNoteSearch] = useState("");
+  const [noteSort, setNoteSort] = useState("newest");
+  const [showNoteSort, setShowNoteSort] = useState(false);
+
+  const [recipes, setRecipes] = useState([]);
+  const [recipeTitle, setRecipeTitle] = useState("");
+  const [recipeUrl, setRecipeUrl] = useState("");
+  const [recipeIngredients, setRecipeIngredients] = useState("");
+  const [recipeInstructions, setRecipeInstructions] = useState("");
+  const [recipeCategory, setRecipeCategory] = useState("");
+  const [recipeSearch, setRecipeSearch] = useState("");
+  const [recipeSort, setRecipeSort] = useState("newest");
+  const [showRecipeSort, setShowRecipeSort] = useState(false);
+  const [recipeCatFilter, setRecipeCatFilter] = useState("");
+
+  const [groceryItems, setGroceryItems] = useState([]);
+  const [groceryInput, setGroceryInput] = useState("");
+  const [showGroceryCats, setShowGroceryCats] = useState(false);
+  const [groceryCatFilter, setGroceryCatFilter] = useState("");
+  const [longPressItem, setLongPressItem] = useState(null);
+  const [groceryConverting, setGroceryConverting] = useState(false);
+  const [pendingIngredients, setPendingIngredients] = useState(null);
+
+  const [mealPlan, setMealPlan] = useState({});
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [mealPickerDay, setMealPickerDay] = useState(null);
+
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [grokKey, setGrokKey] = useState("");
+  const [grokKeyInput, setGrokKeyInput] = useState("");
+  const [aiProvider, setAiProvider] = useState("claude"); // "claude" or "grok"
+
+  // Grocery sync
+  const [supaUrl, setSupaUrl] = useState("");
+  const [supaKey, setSupaKey] = useState("");
+  const [familyCode, setFamilyCode] = useState("");
+  const [syncStatus, setSyncStatus] = useState(""); // "", "synced", "syncing", "error"
+  const syncRef = useRef(false); // prevents pull→save→push loops
+  const lastSyncTs = useRef(0);
+
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [toastMsg, setToastMsg] = useState("");
+  const [exportDataStr, setExportDataStr] = useState("");
+  const [showOffline, setShowOffline] = useState(false);
+  const [undoAction, setUndoAction] = useState(null);
+  const undoTimerRef = useRef(null);
+
+  const [isLandscape, setIsLandscape] = useState(false);
+  const wakeLockRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  // Splash screen — waits for data to load before dismissing
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const t1 = setTimeout(() => setSplashFade(true), 300);
+    const t2 = setTimeout(() => setShowSplash(false), 1000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [dataLoaded]);
+
+  useEffect(() => { const mq = window.matchMedia("(orientation: landscape)"); setIsLandscape(mq.matches); const h = (e) => setIsLandscape(e.matches); mq.addEventListener("change", h); return () => mq.removeEventListener("change", h); }, []);
+
+  useEffect(() => {
+    (async () => {
+      const n = await store.get("mm-notes"); const r = await store.get("mm-recipes"); const g = await store.get("mm-grocery");
+      const cs = await store.get("mm-clock-style"); const cc = await store.get("mm-clock-color"); const ak = await store.get("mm-api-key");
+      const ns = await store.get("mm-note-sort"); const rs = await store.get("mm-recipe-sort"); const gc = await store.get("mm-show-grocery-cats");
+      const mp = await store.get("mm-meal-plan"); const gk = await store.get("mm-grok-key"); const ap = await store.get("mm-ai-provider");
+      const su = await store.get("mm-supa-url"); const sk = await store.get("mm-supa-key"); const fc = await store.get("mm-family-code");
+      if (n) setNotes(n); if (r) setRecipes(r); if (g) setGroceryItems(g);
+      if (cs) setClockStyle(cs); if (cc) setClockColor(cc); if (ak) setApiKey(ak);
+      if (ns) setNoteSort(ns); if (rs) setRecipeSort(rs); if (gc !== null) setShowGroceryCats(gc);
+      if (mp) setMealPlan(mp); if (gk) setGrokKey(gk); if (ap) setAiProvider(ap);
+      if (su) setSupaUrl(su); if (sk) setSupaKey(sk); if (fc) setFamilyCode(fc);
+      setDataLoaded(true);
+    })();
+  }, []);
+
+  useEffect(() => { const i = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(i); }, []);
+  useEffect(() => {
+    const acq = async () => { if (tab === "clock" && "wakeLock" in navigator) { try { wakeLockRef.current = await navigator.wakeLock.request("screen"); } catch {} } else if (wakeLockRef.current) { wakeLockRef.current.release(); wakeLockRef.current = null; } };
+    acq(); const hv = () => { if (document.visibilityState === "visible" && tab === "clock") acq(); };
+    document.addEventListener("visibilitychange", hv); return () => { document.removeEventListener("visibilitychange", hv); if (wakeLockRef.current) wakeLockRef.current.release(); };
+  }, [tab]);
+
+  // Save helpers
+  const saveNotes = useCallback((n) => { setNotes(n); store.set("mm-notes", n); }, []);
+  const saveRecipes = useCallback((r) => { setRecipes(r); store.set("mm-recipes", r); }, []);
+  const saveGrocery = useCallback((g) => {
+    setGroceryItems(g); store.set("mm-grocery", g);
+    if (!syncRef.current) pushGrocery(g);
+  }, [supaUrl, supaKey, familyCode]);
+
+  // ─── Grocery Sync ──────────────────────────────────────────
+  const syncConfigured = !!(supaUrl && supaKey && familyCode);
+
+  const pushGrocery = async (items) => {
+    if (!supaUrl || !supaKey || !familyCode) return;
+    try {
+      const ts = Date.now();
+      lastSyncTs.current = ts;
+      await fetch(`${supaUrl}/rest/v1/grocery_sync`, {
+        method: "POST",
+        headers: { "apikey": supaKey, "Authorization": `Bearer ${supaKey}`, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ family_code: familyCode, items: JSON.stringify(items), updated_at: ts })
+      });
+      setSyncStatus("synced");
+    } catch { setSyncStatus("error"); }
+  };
+
+  const pullGrocery = async () => {
+    if (!supaUrl || !supaKey || !familyCode || syncRef.current) return;
+    try {
+      const resp = await fetch(
+        `${supaUrl}/rest/v1/grocery_sync?family_code=eq.${encodeURIComponent(familyCode)}&select=*`,
+        { headers: { "apikey": supaKey, "Authorization": `Bearer ${supaKey}` } }
+      );
+      if (!resp.ok) { setSyncStatus("error"); return; }
+      const rows = await resp.json();
+      if (rows.length > 0 && rows[0].updated_at > lastSyncTs.current) {
+        syncRef.current = true;
+        lastSyncTs.current = rows[0].updated_at;
+        const items = typeof rows[0].items === "string" ? JSON.parse(rows[0].items) : rows[0].items;
+        setGroceryItems(items); store.set("mm-grocery", items);
+        syncRef.current = false;
+        setSyncStatus("synced");
+      }
+    } catch { setSyncStatus("error"); }
+  };
+
+  // Poll for changes every 10 seconds
+  useEffect(() => {
+    if (!syncConfigured) return;
+    pullGrocery(); // initial pull on mount
+    const id = setInterval(pullGrocery, 10000);
+    return () => clearInterval(id);
+  }, [supaUrl, supaKey, familyCode]);
+  const saveClockStyle = useCallback((s) => { setClockStyle(s); store.set("mm-clock-style", s); }, []);
+  const saveClockColor = useCallback((c) => { setClockColor(c); store.set("mm-clock-color", c); }, []);
+  const saveNoteSort = (s) => { setNoteSort(s); store.set("mm-note-sort", s); };
+  const saveRecipeSort = (s) => { setRecipeSort(s); store.set("mm-recipe-sort", s); };
+  const toggleGroceryCats = () => { const v = !showGroceryCats; setShowGroceryCats(v); if (!v) setGroceryCatFilter(""); store.set("mm-show-grocery-cats", v); };
+
+  const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(""), 2500); };
+
+  const triggerUndo = (label, restoreFn) => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoAction({ label, restore: restoreFn });
+    undoTimerRef.current = setTimeout(() => { setUndoAction(null); }, 5000);
+  };
+  const doUndo = () => {
+    if (undoAction?.restore) undoAction.restore();
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoAction(null);
+    showToast("Restored!");
+  };
+
+  const resetSubView = () => { setSubView(null); setEditId(null); setNoteTitle(""); setNoteBody(""); setNoteColor(null); setNoteDueDate(""); setNoteChecklist(false); setNoteChecklistItems([]); setChecklistInput(""); setRecipeTitle(""); setRecipeUrl(""); setRecipeIngredients(""); setRecipeInstructions(""); setRecipeCategory(""); setExtractError(""); };
+  const confirmDelete = (msg, fn, label) => setConfirmAction({ message: msg, onConfirm: () => { fn(); setConfirmAction(null); }, confirmLabel: label });
+
+  // Sort & filter
+  const filterItems = (items, search) => { if (!search.trim()) return items; const s = search.toLowerCase(); return items.filter(i => (i.title || "").toLowerCase().includes(s) || (i.body || "").toLowerCase().includes(s) || (i.name || "").toLowerCase().includes(s)); };
+  const sortItems = (items, sortBy) => {
+    const sorter = (arr) => { const a = [...arr]; switch(sortBy) { case "oldest": return a.sort((x,y) => x.created - y.created); case "alpha": return a.sort((x,y) => (x.title||x.name||"").localeCompare(y.title||y.name||"")); case "alpha-rev": return a.sort((x,y) => (y.title||y.name||"").localeCompare(x.title||x.name||"")); case "updated": return a.sort((x,y) => (y.updated||y.created) - (x.updated||x.created)); default: return a.sort((x,y) => y.created - x.created); } };
+    return [...sorter(items.filter(i => i.pinned)), ...sorter(items.filter(i => !i.pinned))];
+  };
+
+  // ─── Clock ───────────────────────────────────────────────────
+  const renderClock = () => {
+    const h = time.getHours(); const m = time.getMinutes(); const s = time.getSeconds();
+    const hStr = String(h > 12 ? h - 12 : h || 12).padStart(2, "0");
+    const mins = String(m).padStart(2, "0"); const secs = String(s).padStart(2, "0");
+    const ampm = h >= 12 ? "PM" : "AM";
+    const dateStr = time.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+    const lc = isLandscape;
+    if (clockStyle === "classic") return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1 }}>
+        {lc ? (<>
+          <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: "min(70vh, 37vw)", fontWeight: 700, color: clockColor, letterSpacing: "0.02em", lineHeight: 1, textShadow: `0 0 60px ${clockColor}33`, padding: "0 2vw" }}>{hStr}:{mins}</div>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: "clamp(16px, 6vw, 60px)", marginTop: "4px", width: "100%", padding: "0 2vw" }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+              <span style={{ fontFamily: "'Orbitron', sans-serif", fontSize: "min(8vh, 4.5vw)", fontWeight: 400, color: clockColor, opacity: 0.5 }}>{secs}</span>
+              <span style={{ fontFamily: "'Orbitron', sans-serif", fontSize: "min(8vh, 4.5vw)", fontWeight: 300, color: clockColor, opacity: 0.5, letterSpacing: "0.15em" }}>{ampm}</span>
+            </div>
+            <div style={{ fontFamily: "'Quicksand', sans-serif", fontSize: "min(8vh, 4.5vw)", fontWeight: 700, color: clockColor, opacity: 0.5, letterSpacing: "0.15em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{dateStr}</div>
+          </div>
+        </>) : (<>
+          <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: "min(18vw, 120px)", fontWeight: 700, color: clockColor, letterSpacing: "0.05em", lineHeight: 1, textShadow: `0 0 40px ${clockColor}33` }}>{hStr}:{mins}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "8px" }}>
+            <span style={{ fontFamily: "'Orbitron', sans-serif", fontSize: "min(6vw, 32px)", fontWeight: 400, color: clockColor, opacity: 0.5 }}>{secs}</span>
+            <span style={{ fontFamily: "'Orbitron', sans-serif", fontSize: "min(4.5vw, 24px)", fontWeight: 300, color: clockColor, opacity: 0.5, letterSpacing: "0.15em" }}>{ampm}</span>
+          </div>
+          <div style={{ fontFamily: "'Quicksand', sans-serif", fontSize: "min(4.5vw, 22px)", color: clockColor, opacity: 0.5, marginTop: "24px", fontWeight: 500, letterSpacing: "0.15em", textTransform: "uppercase" }}>{dateStr}</div>
+        </>)}
+      </div>
+    );
+    if (clockStyle === "minimal") return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1 }}>
+        <div style={{ fontFamily: "'Quicksand', sans-serif", fontSize: lc ? "min(70vh, 42vw)" : "min(26vw, 180px)", fontWeight: 300, color: clockColor, letterSpacing: "0.08em", lineHeight: 1, padding: lc ? "0 2vw" : 0 }}>{hStr}:{mins}</div>
+        {lc ? (
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: "clamp(16px, 6vw, 60px)", marginTop: "4px", width: "100%", padding: "0 2vw" }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+              <span style={{ fontFamily: "'Quicksand', sans-serif", fontSize: "min(8vh, 4.5vw)", fontWeight: 300, color: clockColor, opacity: 0.5 }}>{secs}</span>
+              <span style={{ fontFamily: "'Quicksand', sans-serif", fontSize: "min(8vh, 4.5vw)", fontWeight: 300, color: clockColor, opacity: 0.5, letterSpacing: "0.15em" }}>{ampm}</span>
+            </div>
+            <div style={{ fontFamily: "'Quicksand', sans-serif", fontSize: "min(8vh, 4.5vw)", fontWeight: 700, color: clockColor, opacity: 0.5, letterSpacing: "0.15em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{dateStr}</div>
+          </div>
+        ) : (
+          <div style={{ fontFamily: "'Quicksand', sans-serif", fontSize: "min(5vw, 26px)", fontWeight: 500, color: clockColor, opacity: 0.45, marginTop: "20px", letterSpacing: "0.3em", textTransform: "uppercase" }}>{ampm} · {dateStr}</div>
+        )}
+      </div>
+    );
+    if (clockStyle === "flip") { const d = `${hStr}${mins}`.split(""); return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+          <FlipDigit digit={d[0]} color={clockColor} landscape={lc} /><FlipDigit digit={d[1]} color={clockColor} landscape={lc} />
+          <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: lc ? "min(28vh, 9vw)" : "min(14vw, 70px)", color: clockColor, margin: "0 1px", opacity: time.getSeconds() % 2 === 0 ? 1 : 0.3, transition: "opacity 0.3s" }}>:</span>
+          <FlipDigit digit={d[2]} color={clockColor} landscape={lc} /><FlipDigit digit={d[3]} color={clockColor} landscape={lc} />
+        </div>
+        {lc ? (
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: "clamp(16px, 6vw, 60px)", marginTop: "8px", width: "100%", padding: "0 2vw" }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+              <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: "min(8vh, 4.5vw)", color: clockColor, opacity: 0.5 }}>{secs}</span>
+              <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: "min(8vh, 4.5vw)", color: clockColor, opacity: 0.5 }}>{ampm}</span>
+            </div>
+            <div style={{ fontFamily: "'Quicksand', sans-serif", fontSize: "min(8vh, 4.5vw)", color: clockColor, opacity: 0.5, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700, whiteSpace: "nowrap" }}>{dateStr}</div>
+          </div>
+        ) : (<>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "20px" }}><span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: "min(5vw, 28px)", color: clockColor, opacity: 0.6 }}>{ampm}</span></div>
+          <div style={{ fontFamily: "'Quicksand', sans-serif", fontSize: "min(4vw, 20px)", color: clockColor, opacity: 0.45, marginTop: "16px", letterSpacing: "0.2em", textTransform: "uppercase", fontWeight: 500 }}>{dateStr}</div>
+        </>)}
+      </div>
+    ); }
+  };
+
+  const renderClockSettings = () => (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 100, display: "flex", flexDirection: "column", padding: "24px", animation: "fadeIn 0.2s ease", overflowY: "auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
+        <h2 style={{ fontFamily: "'Quicksand', sans-serif", fontSize: "20px", fontWeight: 600, color: "#fff", margin: 0 }}>Settings</h2>
+        <button onClick={() => setShowClockSettings(false)} style={iconBtnStyle}><X size={22} color="#999" /></button>
+      </div>
+      <label style={settingsLabel}>Clock Style</label>
+      <div style={{ display: "flex", gap: "8px", marginBottom: "28px", flexWrap: "wrap" }}>
+        {CLOCK_STYLES.map(s => <button key={s.id} onClick={() => saveClockStyle(s.id)} style={{ padding: "10px 18px", borderRadius: "10px", border: "2px solid", borderColor: clockStyle === s.id ? clockColor : "#333", background: clockStyle === s.id ? `${clockColor}15` : "#111", color: clockStyle === s.id ? clockColor : "#888", fontFamily: "'Quicksand', sans-serif", fontSize: "14px", fontWeight: 500, cursor: "pointer" }}>{s.name}</button>)}
+      </div>
+      <label style={settingsLabel}>Clock Color</label>
+      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "36px" }}>
+        {CLOCK_COLORS.map(c => <button key={c.value} onClick={() => saveClockColor(c.value)} style={{ width: "44px", height: "44px", borderRadius: "50%", border: "3px solid", borderColor: clockColor === c.value ? "#fff" : "transparent", background: c.value, cursor: "pointer", boxShadow: clockColor === c.value ? `0 0 16px ${c.value}66` : "none" }} title={c.name} />)}
+      </div>
+      <label style={settingsLabel}>Data Management</label>
+      <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
+        <button onClick={doExport} style={{ ...primaryBtn, background: "#1a1a1a", border: "1.5px solid #333", color: "#ccc", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", flex: 1, padding: "12px" }}>
+          <Download size={16} style={{ pointerEvents: "none" }} /> Export Backup
+        </button>
+        <button onClick={() => fileInputRef.current?.click()} style={{ ...primaryBtn, background: "#1a1a1a", border: "1.5px solid #333", color: "#ccc", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", flex: 1, padding: "12px" }}>
+          <Upload size={16} style={{ pointerEvents: "none" }} /> Import Backup
+        </button>
+      </div>
+      <p style={{ fontFamily: "'Quicksand', sans-serif", fontSize: "12px", color: "#555", margin: "0 0 12px" }}>Export saves all notes, recipes, and grocery items. Import restores from a backup file.</p>
+      {(() => {
+        const keys = ["mm-notes", "mm-recipes", "mm-grocery", "mm-meal-plan", "mm-clock-style", "mm-clock-color", "mm-api-key", "mm-grok-key", "mm-ai-provider", "mm-supa-url", "mm-supa-key", "mm-family-code", "mm-note-sort", "mm-recipe-sort", "mm-show-grocery-cats"];
+        let bytes = 0; keys.forEach(k => { try { const v = localStorage.getItem(k); if (v) bytes += v.length * 2; } catch {} });
+        const kb = (bytes / 1024).toFixed(1); const mb = (bytes / (1024 * 1024)).toFixed(2);
+        const maxMB = 5; const pct = Math.min((bytes / (maxMB * 1024 * 1024)) * 100, 100);
+        return (
+          <div style={{ marginBottom: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+              <span style={{ fontFamily: QS, fontSize: "11px", color: "#555" }}>Storage used</span>
+              <span style={{ fontFamily: QS, fontSize: "11px", color: pct > 80 ? "#FF6B6B" : "#555" }}>{bytes > 1024 * 1024 ? `${mb} MB` : `${kb} KB`} / ~{maxMB} MB</span>
+            </div>
+            <div style={{ height: "4px", borderRadius: "2px", background: "#222", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${pct}%`, borderRadius: "2px", background: pct > 80 ? "#FF6B6B" : pct > 50 ? "#FFB347" : "#BB86FC", transition: "width 0.3s" }} />
+            </div>
+          </div>
+        );
+      })()}
+      <input ref={fileInputRef} type="file" accept=".json,application/json,*/*" style={{ display: "none" }} onChange={importData} />
+      <label style={{ ...settingsLabel, marginTop: "24px" }}>AI Provider</label>
       <div style={{ display: "flex", gap: "0", marginBottom: "16px", borderRadius: "10px", overflow: "hidden", border: "1.5px solid #333" }}>
         <div onClick={() => { setAiProvider("claude"); store.set("mm-ai-provider", "claude"); }} style={{ flex: 1, padding: "10px", textAlign: "center", fontFamily: QS, fontSize: "13px", fontWeight: 600, cursor: "pointer", background: aiProvider === "claude" ? "#BB86FC25" : "transparent", color: aiProvider === "claude" ? "#BB86FC" : "#666", borderRight: "1px solid #333" }}>Claude</div>
         <div onClick={() => { setAiProvider("grok"); store.set("mm-ai-provider", "grok"); }} style={{ flex: 1, padding: "10px", textAlign: "center", fontFamily: QS, fontSize: "13px", fontWeight: 600, cursor: "pointer", background: aiProvider === "grok" ? "#BB86FC25" : "transparent", color: aiProvider === "grok" ? "#BB86FC" : "#666" }}>Grok</div>
