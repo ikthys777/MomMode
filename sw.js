@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mom-mode-v15';
+const CACHE_NAME = 'mom-mode-v16';
 const ASSETS = ['index.html', 'manifest.json', 'icon-192.svg'];
 
 self.addEventListener('install', e => {

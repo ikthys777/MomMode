@@ -278,7 +278,10 @@ function MomMode() {
   const wakeLockRef = useRef(null);
   const fileInputRef = useRef(null);
   const imgInputRef = useRef(null);
+  const recipeImgRef = useRef(null);
   const [imgScanning, setImgScanning] = useState(false);
+  const [recipeImgScanning, setRecipeImgScanning] = useState(false);
+  const [groceryMultiplier, setGroceryMultiplier] = useState(1);
 
   // Splash screen — waits for data to load before dismissing
   useEffect(() => {
@@ -781,14 +784,15 @@ function MomMode() {
     showToast(`Added ${newItems.length} item${newItems.length > 1 ? "s" : ""} to grocery list`);
   };
 
-  const doSmartAdd = async (ingredientsText) => {
+  const doSmartAdd = async (ingredientsText, multiplier = 1) => {
     setGroceryConverting(true);
     try {
       const cats = GROCERY_CATEGORIES.join(", ");
+      const multInstruction = multiplier > 1 ? ` IMPORTANT: Multiply ALL quantities by ${multiplier} (e.g., if recipe says "1 cup", output "${multiplier} cups"; if "2 cloves", output "${multiplier * 2} cloves").` : "";
       const text = await callAI(
         [{ role: "user", content: `Convert these recipe ingredients into a grocery list:\n\n${ingredientsText}` }],
         null,
-        `You are a grocery list converter. Convert recipe ingredients into clean grocery items with store categories. Remove any duplicate items within this list — if the same ingredient appears more than once, include it only once with combined quantity. Respond with ONLY a JSON array, no preamble, no markdown. Each item: {"name": "Item name", "qty": "quantity", "category": "Category"}. Keep name and qty separate. Valid categories: ${cats}. Clean up ingredient names (remove prep instructions like "sifted", "diced"). Examples: {"name": "Soy sauce", "qty": "1/3 cup", "category": "Pantry"}, {"name": "Garlic", "qty": "4 cloves", "category": "Produce"}`,
+        `You are a grocery list converter. Convert recipe ingredients into clean grocery items with store categories.${multInstruction} Remove any duplicate items within this list — if the same ingredient appears more than once, include it only once with combined quantity. Respond with ONLY a JSON array, no preamble, no markdown. Each item: {"name": "Item name", "qty": "quantity", "category": "Category"}. Keep name and qty separate. Valid categories: ${cats}. Clean up ingredient names (remove prep instructions like "sifted", "diced"). Examples: {"name": "Soy sauce", "qty": "1/3 cup", "category": "Pantry"}, {"name": "Garlic", "qty": "4 cloves", "category": "Produce"}`,
         apiKey ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-20250514"
       );
       const parsed = extractJSON(text);
@@ -965,6 +969,32 @@ function MomMode() {
       setImgScanning(false);
       await doSmartAdd(combined);
     } catch (err) { showToast(err.message || "Image scan failed"); setImgScanning(false); }
+  };
+
+  const handleRecipeImage = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setRecipeImgScanning(true);
+    try {
+      const prompt = "Look at this image of a recipe ingredient list. Extract each ingredient with its quantity, one per line. Keep qualifiers like 'boneless skinless chicken breasts'. Remove preparation instructions like 'diced' or 'finely chopped'. Return ONLY the list, one item per line, no numbering, no other text.";
+      const allText = [];
+      for (const file of files) {
+        const b64 = await resizeImageToBase64(file, 800);
+        let result;
+        if (apiKey) { result = await callClaudeVision(b64, prompt); }
+        else if (aiProvider === "grok" && grokKey) { result = await callGrokVision(b64, prompt); }
+        else { throw new Error("No API key set"); }
+        if (result.trim()) allText.push(result.trim());
+        if (files.length > 1) showToast(`Scanned image ${allText.length} of ${files.length}...`);
+      }
+      const combined = allText.join("\n");
+      if (combined) {
+        setRecipeIngredients(prev => prev ? prev + "\n" + combined : combined);
+        showToast(`Extracted ${combined.split("\n").length} ingredients`);
+      } else { showToast("No ingredients found in image"); }
+    } catch (err) { showToast(err.message || "Image scan failed"); }
+    setRecipeImgScanning(false);
+    e.target.value = "";
   };
 
   // Extract JSON object or array from text that may contain conversational prose
@@ -1320,7 +1350,14 @@ function MomMode() {
           </div>
           {extractError && <p style={{ fontFamily: QS, fontSize: "13px", color: "#FF6B6B", margin: "4px 0 8px 24px" }}>{extractError}</p>}
           {!extractError && <p style={{ fontFamily: QS, fontSize: "12px", color: "#555", margin: "4px 0 8px 24px" }}>Paste a recipe URL and tap Extract to auto-fill</p>}
-          <label style={{ ...settingsLabel, marginTop: "8px" }}>Ingredients</label>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px" }}>
+            <label style={{ ...settingsLabel, margin: 0 }}>Ingredients</label>
+            <button onClick={() => recipeImgRef.current?.click()} disabled={recipeImgScanning} style={{ background: recipeImgScanning ? "#333" : "#1a1a1a", border: "1.5px solid #BB86FC66", borderRadius: "10px", padding: "5px 12px", display: "flex", alignItems: "center", gap: "6px", cursor: recipeImgScanning ? "wait" : "pointer" }}>
+              {recipeImgScanning ? <span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid #BB86FC", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} /> : <Camera size={14} color="#BB86FC" />}
+              <span style={{ fontFamily: QS, fontSize: "11px", color: "#BB86FC", fontWeight: 600 }}>{recipeImgScanning ? "Scanning..." : "From Photo"}</span>
+            </button>
+            <input ref={recipeImgRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleRecipeImage} />
+          </div>
           <textarea value={recipeIngredients} onChange={e => setRecipeIngredients(e.target.value)} placeholder="List ingredients, one per line..." style={{ ...textareaStyle, minHeight: "100px" }} />
           <label style={{ ...settingsLabel, marginTop: "16px" }}>Instructions</label>
           <textarea value={recipeInstructions} onChange={e => setRecipeInstructions(e.target.value)} placeholder="Write cooking steps..." style={{ ...textareaStyle, minHeight: "140px" }} />
@@ -1807,17 +1844,23 @@ function MomMode() {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", animation: "fadeIn 0.15s ease" }}>
           <div style={{ background: "#1a1a1a", borderRadius: "16px", padding: "24px", maxWidth: "320px", width: "100%", border: "1px solid #2a2a2a" }}>
             <p style={{ fontFamily: QS, fontSize: "16px", color: "#eee", lineHeight: 1.6, margin: "0 0 8px", textAlign: "center", fontWeight: 600 }}>Add to Grocery List</p>
-            <p style={{ fontFamily: QS, fontSize: "13px", color: "#888", lineHeight: 1.5, margin: "0 0 20px", textAlign: "center" }}>
+            <p style={{ fontFamily: QS, fontSize: "13px", color: "#888", lineHeight: 1.5, margin: "0 0 12px", textAlign: "center" }}>
               Use AI to clean up ingredient names and auto-assign store categories?
             </p>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "16px" }}>
+              <span style={{ fontFamily: QS, fontSize: "13px", color: "#aaa" }}>Servings:</span>
+              {[1,2,3,4].map(m => (
+                <div key={m} onClick={() => setGroceryMultiplier(m)} style={{ width: "36px", height: "36px", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: QS, fontSize: "14px", fontWeight: 700, background: groceryMultiplier === m ? "#BB86FC" : "#2a2a2a", color: groceryMultiplier === m ? "#000" : "#888", border: groceryMultiplier === m ? "1.5px solid #BB86FC" : "1.5px solid #333", transition: "all 0.15s ease" }}>{m}x</div>
+              ))}
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <button onClick={() => { const text = pendingIngredients; setPendingIngredients(null); doSmartAdd(text); }} style={{ ...primaryBtn, padding: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+              <button onClick={() => { const text = pendingIngredients; const mult = groceryMultiplier; setPendingIngredients(null); setGroceryMultiplier(1); doSmartAdd(text, mult); }} style={{ ...primaryBtn, padding: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
                 ✨ Smart Add with Categories
               </button>
-              <button onClick={() => { const text = pendingIngredients; setPendingIngredients(null); doSimpleAdd(text); }} style={{ ...primaryBtn, padding: "12px", background: "#1a1a1a", border: "1.5px solid #333", color: "#ccc" }}>
+              <button onClick={() => { const text = pendingIngredients; setPendingIngredients(null); setGroceryMultiplier(1); doSimpleAdd(text); }} style={{ ...primaryBtn, padding: "12px", background: "#1a1a1a", border: "1.5px solid #333", color: "#ccc" }}>
                 Add as-is (no categories)
               </button>
-              <button onClick={() => setPendingIngredients(null)} style={{ ...primaryBtn, padding: "12px", background: "none", border: "1.5px solid #333", color: "#888" }}>
+              <button onClick={() => { setPendingIngredients(null); setGroceryMultiplier(1); }} style={{ ...primaryBtn, padding: "12px", background: "none", border: "1.5px solid #333", color: "#888" }}>
                 Cancel
               </button>
             </div>
