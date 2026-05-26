@@ -281,6 +281,8 @@ function MomMode() {
   const recipeImgRef = useRef(null);
   const [imgScanning, setImgScanning] = useState(false);
   const [recipeImgScanning, setRecipeImgScanning] = useState(false);
+  const recipeInstrRef = useRef(null);
+  const [recipeInstrScanning, setRecipeInstrScanning] = useState(false);
   const [groceryMultiplier, setGroceryMultiplier] = useState(1);
 
   // Splash screen — waits for data to load before dismissing
@@ -997,6 +999,32 @@ function MomMode() {
     e.target.value = "";
   };
 
+  const handleRecipeInstrImage = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setRecipeInstrScanning(true);
+    try {
+      const prompt = "Look at this image of recipe cooking instructions or steps. Extract each step as written, preserving the order. Include temperatures, times, and technique details. Return the steps numbered (1. 2. 3. etc), one per line, no other text.";
+      const allText = [];
+      for (const file of files) {
+        const b64 = await resizeImageToBase64(file, 800);
+        let result;
+        if (apiKey) { result = await callClaudeVision(b64, prompt); }
+        else if (aiProvider === "grok" && grokKey) { result = await callGrokVision(b64, prompt); }
+        else { throw new Error("No API key set"); }
+        if (result.trim()) allText.push(result.trim());
+        if (files.length > 1) showToast(`Scanned image ${allText.length} of ${files.length}...`);
+      }
+      const combined = allText.join("\n");
+      if (combined) {
+        setRecipeInstructions(prev => prev ? prev + "\n" + combined : combined);
+        showToast("Instructions extracted");
+      } else { showToast("No instructions found in image"); }
+    } catch (err) { showToast(err.message || "Image scan failed"); }
+    setRecipeInstrScanning(false);
+    e.target.value = "";
+  };
+
   // Extract JSON object or array from text that may contain conversational prose
   const extractJSON = (text) => {
     // Try direct parse first
@@ -1359,7 +1387,14 @@ function MomMode() {
             <input ref={recipeImgRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleRecipeImage} />
           </div>
           <textarea value={recipeIngredients} onChange={e => setRecipeIngredients(e.target.value)} placeholder="List ingredients, one per line..." style={{ ...textareaStyle, minHeight: "100px" }} />
-          <label style={{ ...settingsLabel, marginTop: "16px" }}>Instructions</label>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "16px" }}>
+            <label style={{ ...settingsLabel, margin: 0 }}>Instructions</label>
+            <button onClick={() => recipeInstrRef.current?.click()} disabled={recipeInstrScanning} style={{ background: recipeInstrScanning ? "#333" : "#1a1a1a", border: "1.5px solid #BB86FC66", borderRadius: "10px", padding: "5px 12px", display: "flex", alignItems: "center", gap: "6px", cursor: recipeInstrScanning ? "wait" : "pointer" }}>
+              {recipeInstrScanning ? <span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid #BB86FC", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} /> : <Camera size={14} color="#BB86FC" />}
+              <span style={{ fontFamily: QS, fontSize: "11px", color: "#BB86FC", fontWeight: 600 }}>{recipeInstrScanning ? "Scanning..." : "From Photo"}</span>
+            </button>
+            <input ref={recipeInstrRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleRecipeInstrImage} />
+          </div>
           <textarea value={recipeInstructions} onChange={e => setRecipeInstructions(e.target.value)} placeholder="Write cooking steps..." style={{ ...textareaStyle, minHeight: "140px" }} />
           <button onClick={handleSaveRecipe} style={{ ...primaryBtn, marginTop: "20px" }}>Save Recipe</button>
         </div>
