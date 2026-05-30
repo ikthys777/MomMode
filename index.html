@@ -245,6 +245,10 @@ function MomMode() {
   const [pendingIngredients, setPendingIngredients] = useState(null);
 
   const [mealPlan, setMealPlan] = useState({});
+  const [mealsAddedDays, setMealsAddedDays] = useState({});
+  const [showMealGroceryModal, setShowMealGroceryModal] = useState(false);
+  const [mealGroceryDays, setMealGroceryDays] = useState({});
+  const [mealGroceryMult, setMealGroceryMult] = useState(1);
   const [weekOffset, setWeekOffset] = useState(0);
   const [mealPickerDay, setMealPickerDay] = useState(null);
 
@@ -302,11 +306,13 @@ function MomMode() {
       const ns = await store.get("mm-note-sort"); const rs = await store.get("mm-recipe-sort"); const gc = await store.get("mm-show-grocery-cats");
       const mp = await store.get("mm-meal-plan"); const gk = await store.get("mm-grok-key"); const ap = await store.get("mm-ai-provider");
       const su = await store.get("mm-supa-url"); const sk = await store.get("mm-supa-key"); const fc = await store.get("mm-family-code");
+      const mad = await store.get("mm-meals-added");
       if (n) setNotes(n); if (r) setRecipes(r); if (g) setGroceryItems(g);
       if (cs) setClockStyle(cs); if (cc) setClockColor(cc); if (ak) setApiKey(ak);
       if (ns) setNoteSort(ns); if (rs) setRecipeSort(rs); if (gc !== null) setShowGroceryCats(gc);
       if (mp) setMealPlan(mp); if (gk) setGrokKey(gk); if (ap) setAiProvider(ap);
       if (su) setSupaUrl(su); if (sk) setSupaKey(sk); if (fc) setFamilyCode(fc);
+      if (mad) setMealsAddedDays(mad);
       setDataLoaded(true);
     })();
   }, []);
@@ -1202,6 +1208,7 @@ function MomMode() {
     const current = mealPlan[dateStr] || [];
     if (current.includes(recipeId)) return;
     saveMealPlan({ ...mealPlan, [dateStr]: [...current, recipeId] });
+    if (mealsAddedDays[dateStr]) { const u = { ...mealsAddedDays }; delete u[dateStr]; saveMealsAdded(u); }
   };
 
   const removeMeal = (dateStr, recipeId) => {
@@ -1209,20 +1216,41 @@ function MomMode() {
     const updated = { ...mealPlan };
     if (current.length === 0) delete updated[dateStr]; else updated[dateStr] = current;
     saveMealPlan(updated);
+    if (mealsAddedDays[dateStr]) { const u = { ...mealsAddedDays }; delete u[dateStr]; saveMealsAdded(u); }
   };
 
-  const generateWeekGroceryList = () => {
+  const saveMealsAdded = (mad) => { setMealsAddedDays(mad); store.set("mm-meals-added", mad); };
+
+  const openMealGroceryModal = () => {
     const days = getWeekDays(weekOffset);
+    const daysWithMeals = days.filter(d => (mealPlan[d] || []).length > 0);
+    if (daysWithMeals.length === 0) { showToast("No meals planned this week"); return; }
+    // Default-check days not yet added to grocery; uncheck already-added days
+    const selection = {};
+    daysWithMeals.forEach(d => { selection[d] = !mealsAddedDays[d]; });
+    setMealGroceryDays(selection);
+    setMealGroceryMult(1);
+    setShowMealGroceryModal(true);
+  };
+
+  const confirmMealGrocery = () => {
+    const selectedDays = Object.keys(mealGroceryDays).filter(d => mealGroceryDays[d]);
+    if (selectedDays.length === 0) { showToast("Select at least one day"); return; }
     const allIngredients = [];
-    days.forEach(dateStr => {
+    selectedDays.forEach(dateStr => {
       (mealPlan[dateStr] || []).forEach(recipeId => {
         const recipe = recipes.find(r => r.id === recipeId);
         if (recipe?.ingredients) allIngredients.push(recipe.ingredients);
       });
     });
-    if (allIngredients.length === 0) { showToast("No meals planned this week"); return; }
-    const combined = allIngredients.join("\n");
-    setPendingIngredients(combined);
+    const mult = mealGroceryMult;
+    // Mark these days as added
+    const newAdded = { ...mealsAddedDays };
+    selectedDays.forEach(d => { newAdded[d] = true; });
+    saveMealsAdded(newAdded);
+    setShowMealGroceryModal(false);
+    if (allIngredients.length === 0) { showToast("No ingredients in selected days"); return; }
+    doSmartAdd(allIngredients.join("\n"), mult);
   };
 
   // ─── Render Content ──────────────────────────────────────────
@@ -1669,8 +1697,8 @@ function MomMode() {
               </div>
             </div>
             {weekMealCount > 0 && (
-              <button onClick={generateWeekGroceryList} style={{ ...primaryBtn, padding: "10px", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
-                <ShoppingCart size={16} style={{ pointerEvents: "none" }} /> Generate Grocery List for This Week
+              <button onClick={openMealGroceryModal} style={{ ...primaryBtn, padding: "10px", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                <ShoppingCart size={16} style={{ pointerEvents: "none" }} /> Add Meals to Grocery List
               </button>
             )}
           </div>
@@ -1690,6 +1718,7 @@ function MomMode() {
                         <div style={{ fontFamily: QS, fontSize: "14px", fontWeight: 600, color: isToday ? "#BB86FC" : "#eee" }}>{info.short}</div>
                         {isToday && <div style={{ fontFamily: QS, fontSize: "10px", color: "#BB86FC", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em" }}>Today</div>}
                       </div>
+                      {meals.length > 0 && mealsAddedDays[dateStr] && <span style={{ fontFamily: QS, fontSize: "10px", color: "#4CAF50", fontWeight: 600, background: "#4CAF5015", border: "1px solid #4CAF5044", borderRadius: "8px", padding: "2px 8px" }}>✓ In grocery</span>}
                     </div>
                     <div onClick={() => setMealPickerDay(dateStr)} style={{ padding: "6px 12px", borderRadius: "8px", background: "#BB86FC15", border: "1px solid #BB86FC44", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
                       <Plus size={14} color="#BB86FC" style={{ pointerEvents: "none" }} />
@@ -1788,6 +1817,49 @@ function MomMode() {
       )}
 
       {/* Meal recipe picker */}
+      {showMealGroceryModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center", animation: "fadeIn 0.15s ease" }}
+          onClick={() => setShowMealGroceryModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#1a1a1a", borderRadius: "20px 20px 0 0", padding: "20px", width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column", border: "1px solid #2a2a2a" }}>
+            <h3 style={{ fontFamily: QS, fontSize: "16px", fontWeight: 600, color: "#eee", margin: "0 0 4px", textAlign: "center" }}>Add Meals to Grocery</h3>
+            <p style={{ fontFamily: QS, fontSize: "13px", color: "#888", margin: "0 0 16px", textAlign: "center" }}>Select days to add. Days already added are unchecked.</p>
+            <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", marginBottom: "16px", minHeight: 0 }}>
+              {Object.keys(mealGroceryDays).map(dateStr => {
+                const checked = mealGroceryDays[dateStr];
+                const info = dayLabel(dateStr);
+                const dayMeals = (mealPlan[dateStr] || []).map(id => recipes.find(r => r.id === id)).filter(Boolean);
+                return (
+                  <div key={dateStr} onClick={() => setMealGroceryDays(prev => ({ ...prev, [dateStr]: !prev[dateStr] }))}
+                    style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", marginBottom: "8px", borderRadius: "12px", background: checked ? "#BB86FC12" : "#151515", border: `1.5px solid ${checked ? "#BB86FC66" : "#222"}`, cursor: "pointer" }}>
+                    <div style={{ width: "22px", height: "22px", borderRadius: "6px", border: `2px solid ${checked ? "#BB86FC" : "#444"}`, background: checked ? "#BB86FC" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {checked && <Check size={14} color="#000" style={{ pointerEvents: "none" }} />}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontFamily: QS, fontSize: "14px", fontWeight: 600, color: "#eee" }}>{info.short}</span>
+                        {mealsAddedDays[dateStr] && <span style={{ fontFamily: QS, fontSize: "10px", color: "#4CAF50", fontWeight: 600 }}>✓ added</span>}
+                      </div>
+                      <span style={{ fontFamily: QS, fontSize: "12px", color: "#888" }}>{dayMeals.map(m => m.title).join(", ")}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "16px", flexShrink: 0 }}>
+              <span style={{ fontFamily: QS, fontSize: "13px", color: "#aaa" }}>Yield:</span>
+              {[1,2,3,4].map(m => (
+                <div key={m} onClick={() => setMealGroceryMult(m)} style={{ width: "36px", height: "36px", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: QS, fontSize: "14px", fontWeight: 700, background: mealGroceryMult === m ? "#BB86FC" : "#2a2a2a", color: mealGroceryMult === m ? "#000" : "#888", border: mealGroceryMult === m ? "1.5px solid #BB86FC" : "1.5px solid #333" }}>{m}x</div>
+              ))}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", flexShrink: 0 }}>
+              <button onClick={confirmMealGrocery} style={{ ...primaryBtn, padding: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                <ShoppingCart size={16} style={{ pointerEvents: "none" }} /> Add Selected to Grocery
+              </button>
+              <button onClick={() => setShowMealGroceryModal(false)} style={{ ...primaryBtn, padding: "12px", background: "none", border: "1.5px solid #333", color: "#888" }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
       {mealPickerDay && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "0", animation: "fadeIn 0.15s ease" }}
           onClick={() => setMealPickerDay(null)}>
