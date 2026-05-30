@@ -248,7 +248,7 @@ function MomMode() {
   const [mealsAddedDays, setMealsAddedDays] = useState({});
   const [showMealGroceryModal, setShowMealGroceryModal] = useState(false);
   const [mealGroceryDays, setMealGroceryDays] = useState({});
-  const [mealGroceryMult, setMealGroceryMult] = useState(1);
+  const [mealMults, setMealMults] = useState({});
   const [weekOffset, setWeekOffset] = useState(0);
   const [mealPickerDay, setMealPickerDay] = useState(null);
 
@@ -800,7 +800,7 @@ function MomMode() {
       const text = await callAI(
         [{ role: "user", content: `Convert these recipe ingredients into a grocery list:\n\n${ingredientsText}` }],
         null,
-        `You are a grocery list converter. Convert recipe ingredients into clean grocery items with store categories.${multInstruction} Remove any duplicate items within this list — if the same ingredient appears more than once, include it only once with combined quantity. Respond with ONLY a JSON array, no preamble, no markdown. Each item: {"name": "Item name", "qty": "quantity", "category": "Category"}. Keep name and qty separate. Valid categories: ${cats}. Clean up ingredient names (remove prep instructions like "sifted", "diced"). Examples: {"name": "Soy sauce", "qty": "1/3 cup", "category": "Pantry"}, {"name": "Garlic", "qty": "4 cloves", "category": "Produce"}`,
+        `You are a grocery list converter. Convert recipe ingredients into clean grocery items with store categories.${multInstruction} If the input groups ingredients under headers containing a scale factor (e.g. "=== Tacos (scale 3x) ==="), multiply that section's quantities by the noted factor before combining. Remove any duplicate items within this list — if the same ingredient appears more than once, include it only once with combined quantity. Respond with ONLY a JSON array, no preamble, no markdown. Each item: {"name": "Item name", "qty": "quantity", "category": "Category"}. Keep name and qty separate. Valid categories: ${cats}. Clean up ingredient names (remove prep instructions like "sifted", "diced"). Ignore the header lines themselves. Examples: {"name": "Soy sauce", "qty": "1/3 cup", "category": "Pantry"}, {"name": "Garlic", "qty": "4 cloves", "category": "Produce"}`,
         apiKey ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-20250514"
       );
       const parsed = extractJSON(text);
@@ -1227,30 +1227,36 @@ function MomMode() {
     if (daysWithMeals.length === 0) { showToast("No meals planned this week"); return; }
     // Default-check days not yet added to grocery; uncheck already-added days
     const selection = {};
-    daysWithMeals.forEach(d => { selection[d] = !mealsAddedDays[d]; });
+    const mults = {};
+    daysWithMeals.forEach(d => {
+      selection[d] = !mealsAddedDays[d];
+      (mealPlan[d] || []).forEach(recipeId => { mults[`${d}__${recipeId}`] = 1; });
+    });
     setMealGroceryDays(selection);
-    setMealGroceryMult(1);
+    setMealMults(mults);
     setShowMealGroceryModal(true);
   };
 
   const confirmMealGrocery = () => {
     const selectedDays = Object.keys(mealGroceryDays).filter(d => mealGroceryDays[d]);
     if (selectedDays.length === 0) { showToast("Select at least one day"); return; }
-    const allIngredients = [];
+    const sections = [];
     selectedDays.forEach(dateStr => {
       (mealPlan[dateStr] || []).forEach(recipeId => {
         const recipe = recipes.find(r => r.id === recipeId);
-        if (recipe?.ingredients) allIngredients.push(recipe.ingredients);
+        if (!recipe?.ingredients) return;
+        const m = mealMults[`${dateStr}__${recipeId}`] || 1;
+        const header = m > 1 ? `=== ${recipe.title} (scale ${m}x) ===` : `=== ${recipe.title} ===`;
+        sections.push(`${header}\n${recipe.ingredients}`);
       });
     });
-    const mult = mealGroceryMult;
     // Mark these days as added
     const newAdded = { ...mealsAddedDays };
     selectedDays.forEach(d => { newAdded[d] = true; });
     saveMealsAdded(newAdded);
     setShowMealGroceryModal(false);
-    if (allIngredients.length === 0) { showToast("No ingredients in selected days"); return; }
-    doSmartAdd(allIngredients.join("\n"), mult);
+    if (sections.length === 0) { showToast("No ingredients in selected days"); return; }
+    doSmartAdd(sections.join("\n\n"), 1);
   };
 
   // ─── Render Content ──────────────────────────────────────────
@@ -1822,34 +1828,41 @@ function MomMode() {
           onClick={() => setShowMealGroceryModal(false)}>
           <div onClick={e => e.stopPropagation()} style={{ background: "#1a1a1a", borderRadius: "20px 20px 0 0", padding: "20px", width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column", border: "1px solid #2a2a2a" }}>
             <h3 style={{ fontFamily: QS, fontSize: "16px", fontWeight: 600, color: "#eee", margin: "0 0 4px", textAlign: "center" }}>Add Meals to Grocery</h3>
-            <p style={{ fontFamily: QS, fontSize: "13px", color: "#888", margin: "0 0 16px", textAlign: "center" }}>Select days to add. Days already added are unchecked.</p>
+            <p style={{ fontFamily: QS, fontSize: "13px", color: "#888", margin: "0 0 16px", textAlign: "center" }}>Pick days, then set yield per meal. Already-added days start unchecked.</p>
             <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", marginBottom: "16px", minHeight: 0 }}>
               {Object.keys(mealGroceryDays).map(dateStr => {
                 const checked = mealGroceryDays[dateStr];
                 const info = dayLabel(dateStr);
                 const dayMeals = (mealPlan[dateStr] || []).map(id => recipes.find(r => r.id === id)).filter(Boolean);
                 return (
-                  <div key={dateStr} onClick={() => setMealGroceryDays(prev => ({ ...prev, [dateStr]: !prev[dateStr] }))}
-                    style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", marginBottom: "8px", borderRadius: "12px", background: checked ? "#BB86FC12" : "#151515", border: `1.5px solid ${checked ? "#BB86FC66" : "#222"}`, cursor: "pointer" }}>
-                    <div style={{ width: "22px", height: "22px", borderRadius: "6px", border: `2px solid ${checked ? "#BB86FC" : "#444"}`, background: checked ? "#BB86FC" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      {checked && <Check size={14} color="#000" style={{ pointerEvents: "none" }} />}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div key={dateStr} style={{ marginBottom: "8px", borderRadius: "12px", background: checked ? "#BB86FC12" : "#151515", border: `1.5px solid ${checked ? "#BB86FC66" : "#222"}`, overflow: "hidden" }}>
+                    <div onClick={() => setMealGroceryDays(prev => ({ ...prev, [dateStr]: !prev[dateStr] }))}
+                      style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", cursor: "pointer" }}>
+                      <div style={{ width: "22px", height: "22px", borderRadius: "6px", border: `2px solid ${checked ? "#BB86FC" : "#444"}`, background: checked ? "#BB86FC" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        {checked && <Check size={14} color="#000" style={{ pointerEvents: "none" }} />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "8px" }}>
                         <span style={{ fontFamily: QS, fontSize: "14px", fontWeight: 600, color: "#eee" }}>{info.short}</span>
                         {mealsAddedDays[dateStr] && <span style={{ fontFamily: QS, fontSize: "10px", color: "#4CAF50", fontWeight: 600 }}>✓ added</span>}
                       </div>
-                      <span style={{ fontFamily: QS, fontSize: "12px", color: "#888" }}>{dayMeals.map(m => m.title).join(", ")}</span>
                     </div>
+                    {checked && dayMeals.map(recipe => {
+                      const key = `${dateStr}__${recipe.id}`;
+                      const mm = mealMults[key] || 1;
+                      return (
+                        <div key={recipe.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", padding: "8px 14px 8px 48px", borderTop: "1px solid #ffffff0a" }}>
+                          <span style={{ fontFamily: QS, fontSize: "13px", color: "#ccc", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{recipe.title}</span>
+                          <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+                            {[1,2,3,4].map(m => (
+                              <div key={m} onClick={() => setMealMults(prev => ({ ...prev, [key]: m }))} style={{ width: "28px", height: "28px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: QS, fontSize: "12px", fontWeight: 700, background: mm === m ? "#BB86FC" : "#2a2a2a", color: mm === m ? "#000" : "#777", border: mm === m ? "1.5px solid #BB86FC" : "1.5px solid #333" }}>{m}x</div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "16px", flexShrink: 0 }}>
-              <span style={{ fontFamily: QS, fontSize: "13px", color: "#aaa" }}>Yield:</span>
-              {[1,2,3,4].map(m => (
-                <div key={m} onClick={() => setMealGroceryMult(m)} style={{ width: "36px", height: "36px", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: QS, fontSize: "14px", fontWeight: 700, background: mealGroceryMult === m ? "#BB86FC" : "#2a2a2a", color: mealGroceryMult === m ? "#000" : "#888", border: mealGroceryMult === m ? "1.5px solid #BB86FC" : "1.5px solid #333" }}>{m}x</div>
-              ))}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px", flexShrink: 0 }}>
               <button onClick={confirmMealGrocery} style={{ ...primaryBtn, padding: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
