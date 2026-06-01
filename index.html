@@ -784,7 +784,7 @@ function MomMode() {
   };
 
   const doSimpleAdd = (ingredientsText) => {
-    const lines = ingredientsText.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+    const lines = ingredientsText.split("\n").map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith("==="));
     const existing = new Set(groceryItems.map(i => i.name.toLowerCase()));
     const newItems = lines.filter(l => !existing.has(l.toLowerCase())).map((name, i) => ({ id: Date.now() + i, name, checked: false, category: "" }));
     if (newItems.length === 0) { showToast("All ingredients already in list"); return; }
@@ -804,7 +804,8 @@ function MomMode() {
         apiKey ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-20250514"
       );
       const parsed = extractJSON(text);
-      const items = Array.isArray(parsed) ? parsed : [];
+      const items = Array.isArray(parsed) ? parsed : (parsed && parsed.name ? [parsed] : []);
+      if (items.length === 0) { showToast("Couldn't read ingredients — try again"); setGroceryConverting(false); return false; }
       let updated = [...groceryItems];
       let added = 0, stacked = 0;
       for (const p of items) {
@@ -839,8 +840,11 @@ function MomMode() {
     } catch (err) {
       if (err.message === "OFFLINE") { setShowOffline(true); }
       else { console.error("Smart add error:", err); showToast("AI failed, adding items as-is"); doSimpleAdd(ingredientsText); }
+      setGroceryConverting(false);
+      return false;
     }
     setGroceryConverting(false);
+    return true;
   };
 
   // Long press to set category on grocery item
@@ -866,7 +870,7 @@ function MomMode() {
       headers["anthropic-version"] = "2023-06-01";
       headers["anthropic-dangerous-direct-browser-access"] = "true";
     }
-    const body = { model: model || "claude-sonnet-4-20250514", max_tokens: 1500, messages };
+    const body = { model: model || "claude-sonnet-4-20250514", max_tokens: 8192, messages };
     if (tools) body.tools = tools;
     if (system) body.system = system;
     const resp = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers, body: JSON.stringify(body) });
@@ -892,7 +896,7 @@ function MomMode() {
       for (const item of (data.output || [])) { if (item.type === "message" && item.content) { for (const c of item.content) { if (c.type === "output_text" && c.text) texts.push(c.text); } } }
       return texts.join("\n") || "";
     }
-    const body = { model: "grok-3-mini-fast", max_tokens: 1500, messages: [] };
+    const body = { model: "grok-3-mini-fast", max_tokens: 8192, messages: [] };
     if (system) body.messages.push({ role: "system", content: system });
     body.messages.push(...messages);
     const resp = await fetch("https://api.x.ai/v1/chat/completions", { method: "POST", headers, body: JSON.stringify(body) });
@@ -1036,17 +1040,37 @@ function MomMode() {
     // Try direct parse first
     const cleaned = text.replace(/```json|```/g, "").trim();
     try { return JSON.parse(cleaned); } catch {}
-    // Find first { or [ and match to its closing bracket
-    for (const [open, close] of [["{", "}"], ["[", "]"]]) {
-      const start = cleaned.indexOf(open);
-      if (start === -1) continue;
+    // Prefer array: if an array start exists, collect all complete {...} objects within it
+    // (this salvages truncated arrays where the closing ] was cut off by token limits)
+    const arrStart = cleaned.indexOf("[");
+    if (arrStart !== -1) {
+      const objs = [];
+      let i = arrStart + 1;
+      while (i < cleaned.length) {
+        if (cleaned[i] === "]") break;
+        if (cleaned[i] === "{") {
+          let depth = 0;
+          let j = i;
+          for (; j < cleaned.length; j++) {
+            if (cleaned[j] === "{") depth++;
+            else if (cleaned[j] === "}") { depth--; if (depth === 0) break; }
+          }
+          if (depth === 0) { // complete object
+            try { objs.push(JSON.parse(cleaned.slice(i, j + 1))); } catch {}
+            i = j + 1;
+          } else break; // truncated mid-object — stop, keep what we have
+        } else i++;
+      }
+      if (objs.length > 0) return objs;
+    }
+    // Fall back to a single object
+    const objStart = cleaned.indexOf("{");
+    if (objStart !== -1) {
       let depth = 0;
-      for (let i = start; i < cleaned.length; i++) {
-        if (cleaned[i] === open) depth++;
-        if (cleaned[i] === close) depth--;
-        if (depth === 0) {
-          try { return JSON.parse(cleaned.slice(start, i + 1)); } catch { break; }
-        }
+      for (let i = objStart; i < cleaned.length; i++) {
+        if (cleaned[i] === "{") depth++;
+        if (cleaned[i] === "}") depth--;
+        if (depth === 0) { try { return JSON.parse(cleaned.slice(objStart, i + 1)); } catch { break; } }
       }
     }
     throw new Error("No valid JSON found in response");
@@ -1237,7 +1261,7 @@ function MomMode() {
     setShowMealGroceryModal(true);
   };
 
-  const confirmMealGrocery = () => {
+  const confirmMealGrocery = async () => {
     const selectedDays = Object.keys(mealGroceryDays).filter(d => mealGroceryDays[d]);
     if (selectedDays.length === 0) { showToast("Select at least one day"); return; }
     const sections = [];
@@ -1250,13 +1274,15 @@ function MomMode() {
         sections.push(`${header}\n${recipe.ingredients}`);
       });
     });
-    // Mark these days as added
-    const newAdded = { ...mealsAddedDays };
-    selectedDays.forEach(d => { newAdded[d] = true; });
-    saveMealsAdded(newAdded);
     setShowMealGroceryModal(false);
     if (sections.length === 0) { showToast("No ingredients in selected days"); return; }
-    doSmartAdd(sections.join("\n\n"), 1);
+    const ok = await doSmartAdd(sections.join("\n\n"), 1);
+    // Only mark days as added if the grocery add actually succeeded
+    if (ok) {
+      const newAdded = { ...mealsAddedDays };
+      selectedDays.forEach(d => { newAdded[d] = true; });
+      saveMealsAdded(newAdded);
+    }
   };
 
   // ─── Render Content ──────────────────────────────────────────
