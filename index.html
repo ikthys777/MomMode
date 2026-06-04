@@ -1759,9 +1759,10 @@ function MomMode() {
                   </div>
                   {meals.map(recipe => (
                     <div key={recipe.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #1a1a1a" }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontFamily: QS, fontSize: "14px", color: "#eee", fontWeight: 500 }}>{recipe.title}</span>
-                        {recipe.category && <span style={{ fontFamily: QS, fontSize: "11px", color: "#888", marginLeft: "8px" }}>{recipe.category}</span>}
+                      <div onClick={() => { setTab("recipes"); setEditId(recipe.id); setSubView("view"); }} style={{ flex: 1, minWidth: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontFamily: QS, fontSize: "14px", color: "#eee", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{recipe.title}</span>
+                        {recipe.category && <span style={{ fontFamily: QS, fontSize: "11px", color: "#888", flexShrink: 0 }}>{recipe.category}</span>}
+                        <ChevronRight size={15} color="#555" style={{ marginLeft: "auto", flexShrink: 0, pointerEvents: "none" }} />
                       </div>
                       <div onClick={() => removeMeal(dateStr, recipe.id)} style={{ padding: "6px", cursor: "pointer", flexShrink: 0, opacity: 0.4 }}>
                         <X size={16} color="#FF6B6B" style={{ pointerEvents: "none" }} />
