@@ -245,9 +245,10 @@ function MomMode() {
   const [pendingIngredients, setPendingIngredients] = useState(null);
 
   const [mealPlan, setMealPlan] = useState({});
-  const [mealsAddedDays, setMealsAddedDays] = useState({});
+  const [mealsAdded, setMealsAdded] = useState({});
   const [showMealGroceryModal, setShowMealGroceryModal] = useState(false);
-  const [mealGroceryDays, setMealGroceryDays] = useState({});
+  const [mealGroceryDayList, setMealGroceryDayList] = useState([]);
+  const [mealSelected, setMealSelected] = useState({});
   const [mealMults, setMealMults] = useState({});
   const [manualMealInput, setManualMealInput] = useState("");
   const [weekOffset, setWeekOffset] = useState(0);
@@ -313,7 +314,7 @@ function MomMode() {
       if (ns) setNoteSort(ns); if (rs) setRecipeSort(rs); if (gc !== null) setShowGroceryCats(gc);
       if (mp) setMealPlan(mp); if (gk) setGrokKey(gk); if (ap) setAiProvider(ap);
       if (su) setSupaUrl(su); if (sk) setSupaKey(sk); if (fc) setFamilyCode(fc);
-      if (mad) setMealsAddedDays(mad);
+      if (mad) setMealsAdded(mad);
       setDataLoaded(true);
     })();
   }, []);
@@ -1242,7 +1243,6 @@ function MomMode() {
     const current = mealPlan[dateStr] || [];
     if (current.includes(recipeId)) return;
     saveMealPlan({ ...mealPlan, [dateStr]: [...current, recipeId] });
-    if (mealsAddedDays[dateStr]) { const u = { ...mealsAddedDays }; delete u[dateStr]; saveMealsAdded(u); }
   };
 
   const addManualMeal = (dateStr, name) => {
@@ -1261,47 +1261,53 @@ function MomMode() {
     const updated = { ...mealPlan };
     if (current.length === 0) delete updated[dateStr]; else updated[dateStr] = current;
     saveMealPlan(updated);
-    if (mealsAddedDays[dateStr]) { const u = { ...mealsAddedDays }; delete u[dateStr]; saveMealsAdded(u); }
+    const akey = `${dateStr}__${mealId}`;
+    if (mealsAdded[akey]) { const u = { ...mealsAdded }; delete u[akey]; saveMealsAdded(u); }
   };
 
-  const saveMealsAdded = (mad) => { setMealsAddedDays(mad); store.set("mm-meals-added", mad); };
+  const saveMealsAdded = (mad) => { setMealsAdded(mad); store.set("mm-meals-added", mad); };
 
   const openMealGroceryModal = () => {
     const days = getWeekDays(weekOffset);
     const daysWithMeals = days.filter(d => (mealPlan[d] || []).length > 0);
     if (daysWithMeals.length === 0) { showToast("No meals planned this week"); return; }
-    // Default-check days not yet added to grocery; uncheck already-added days
-    const selection = {};
+    // Per-meal selection: default-select recipe meals that have not been added yet.
+    const selected = {};
     const mults = {};
     daysWithMeals.forEach(d => {
-      const eligible = (mealPlan[d] || []).map(resolveMeal).filter(m => m && !m.isManual && m.ingredients.trim());
-      selection[d] = eligible.length > 0 && !mealsAddedDays[d];
-      eligible.forEach(m => { mults[`${d}__${m.id}`] = 1; });
+      (mealPlan[d] || []).map(resolveMeal).filter(m => m && !m.isManual && m.ingredients.trim()).forEach(m => {
+        const key = `${d}__${m.id}`;
+        selected[key] = !mealsAdded[key];
+        mults[key] = 1;
+      });
     });
-    setMealGroceryDays(selection);
+    setMealGroceryDayList(daysWithMeals);
+    setMealSelected(selected);
     setMealMults(mults);
     setShowMealGroceryModal(true);
   };
 
   const confirmMealGrocery = async () => {
-    const selectedDays = Object.keys(mealGroceryDays).filter(d => mealGroceryDays[d]);
-    if (selectedDays.length === 0) { showToast("Select at least one day"); return; }
     const sections = [];
-    selectedDays.forEach(dateStr => {
+    const addedKeys = [];
+    mealGroceryDayList.forEach(dateStr => {
       (mealPlan[dateStr] || []).map(resolveMeal).filter(Boolean).forEach(m => {
         if (m.isManual || !m.ingredients.trim()) return;
-        const mult = mealMults[`${dateStr}__${m.id}`] || 1;
+        const key = `${dateStr}__${m.id}`;
+        if (!mealSelected[key]) return;
+        const mult = mealMults[key] || 1;
         const header = mult > 1 ? `=== ${m.name} (scale ${mult}x) ===` : `=== ${m.name} ===`;
         sections.push(`${header}\n${m.ingredients}`);
+        addedKeys.push(key);
       });
     });
+    if (addedKeys.length === 0) { showToast("Select at least one meal"); return; }
     setShowMealGroceryModal(false);
-    if (sections.length === 0) { showToast("No recipe ingredients in selected days"); return; }
     const ok = await doSmartAdd(sections.join("\n\n"), 1);
-    // Only mark days as added if the grocery add actually succeeded
+    // Mark only the meals that were actually added
     if (ok) {
-      const newAdded = { ...mealsAddedDays };
-      selectedDays.forEach(d => { newAdded[d] = true; });
+      const newAdded = { ...mealsAdded };
+      addedKeys.forEach(k => { newAdded[k] = true; });
       saveMealsAdded(newAdded);
     }
   };
@@ -1771,7 +1777,7 @@ function MomMode() {
                         <div style={{ fontFamily: QS, fontSize: "14px", fontWeight: 600, color: isToday ? "#BB86FC" : "#eee" }}>{info.short}</div>
                         {isToday && <div style={{ fontFamily: QS, fontSize: "10px", color: "#BB86FC", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em" }}>Today</div>}
                       </div>
-                      {meals.length > 0 && mealsAddedDays[dateStr] && <span style={{ fontFamily: QS, fontSize: "10px", color: "#4CAF50", fontWeight: 600, background: "#4CAF5015", border: "1px solid #4CAF5044", borderRadius: "8px", padding: "2px 8px" }}>✓ In grocery</span>}
+                      {(() => { const elig = meals.filter(m => !m.isManual && m.ingredients.trim()); if (elig.length === 0) return null; const added = elig.filter(m => mealsAdded[`${dateStr}__${m.id}`]).length; if (added === 0) return null; if (added === elig.length) return <span style={{ fontFamily: QS, fontSize: "10px", color: "#4CAF50", fontWeight: 600, background: "#4CAF5015", border: "1px solid #4CAF5044", borderRadius: "8px", padding: "2px 8px" }}>✓ In grocery</span>; return <span style={{ fontFamily: QS, fontSize: "10px", color: "#FFB74D", fontWeight: 600, background: "#FFB74D15", border: "1px solid #FFB74D44", borderRadius: "8px", padding: "2px 8px" }}>◐ {added}/{elig.length} in grocery</span>; })()}
                     </div>
                     <div onClick={() => setMealPickerDay(dateStr)} style={{ padding: "6px 12px", borderRadius: "8px", background: "#BB86FC15", border: "1px solid #BB86FC44", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
                       <Plus size={14} color="#BB86FC" style={{ pointerEvents: "none" }} />
@@ -1883,46 +1889,61 @@ function MomMode() {
           onClick={() => setShowMealGroceryModal(false)}>
           <div onClick={e => e.stopPropagation()} style={{ background: "#1a1a1a", borderRadius: "20px 20px 0 0", padding: "20px", width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column", border: "1px solid #2a2a2a" }}>
             <h3 style={{ fontFamily: QS, fontSize: "16px", fontWeight: 600, color: "#eee", margin: "0 0 4px", textAlign: "center" }}>Add Meals to Grocery</h3>
-            <p style={{ fontFamily: QS, fontSize: "13px", color: "#888", margin: "0 0 16px", textAlign: "center" }}>Pick days, then set yield per meal. Already-added days start unchecked.</p>
+            <p style={{ fontFamily: QS, fontSize: "13px", color: "#888", margin: "0 0 16px", textAlign: "center" }}>Pick the meals to add and set yield. Already-added meals start unchecked.</p>
             <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", marginBottom: "16px", minHeight: 0 }}>
-              {Object.keys(mealGroceryDays).map(dateStr => {
-                const checked = mealGroceryDays[dateStr];
+              {mealGroceryDayList.map(dateStr => {
                 const info = dayLabel(dateStr);
                 const dayMeals = (mealPlan[dateStr] || []).map(resolveMeal).filter(Boolean);
-                const eligibleCount = dayMeals.filter(m => !m.isManual && m.ingredients.trim()).length;
-                const selectable = eligibleCount > 0;
+                const eligible = dayMeals.filter(m => !m.isManual && m.ingredients.trim());
+                const hasEligible = eligible.length > 0;
+                const selCount = eligible.filter(m => mealSelected[`${dateStr}__${m.id}`]).length;
+                const allSel = hasEligible && selCount === eligible.length;
+                const someSel = selCount > 0;
+                const toggleDay = () => {
+                  if (!hasEligible) return;
+                  const target = !allSel;
+                  setMealSelected(prev => { const next = { ...prev }; eligible.forEach(m => { next[`${dateStr}__${m.id}`] = target; }); return next; });
+                };
                 return (
-                  <div key={dateStr} style={{ marginBottom: "8px", borderRadius: "12px", background: checked ? "#BB86FC12" : "#151515", border: `1.5px solid ${checked ? "#BB86FC66" : "#222"}`, overflow: "hidden", opacity: selectable ? 1 : 0.6 }}>
-                    <div onClick={() => { if (selectable) setMealGroceryDays(prev => ({ ...prev, [dateStr]: !prev[dateStr] })); }}
-                      style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", cursor: selectable ? "pointer" : "default" }}>
-                      <div style={{ width: "22px", height: "22px", borderRadius: "6px", border: `2px solid ${checked ? "#BB86FC" : "#444"}`, background: checked ? "#BB86FC" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        {checked && <Check size={14} color="#000" style={{ pointerEvents: "none" }} />}
+                  <div key={dateStr} style={{ marginBottom: "8px", borderRadius: "12px", background: someSel ? "#BB86FC12" : "#151515", border: `1.5px solid ${someSel ? "#BB86FC66" : "#222"}`, overflow: "hidden", opacity: hasEligible ? 1 : 0.6 }}>
+                    <div onClick={toggleDay} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", cursor: hasEligible ? "pointer" : "default" }}>
+                      <div style={{ width: "22px", height: "22px", borderRadius: "6px", border: `2px solid ${someSel ? "#BB86FC" : "#444"}`, background: allSel ? "#BB86FC" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        {allSel ? <Check size={14} color="#000" style={{ pointerEvents: "none" }} /> : someSel ? <div style={{ width: "10px", height: "2px", background: "#BB86FC" }} /> : null}
                       </div>
                       <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "8px" }}>
                         <span style={{ fontFamily: QS, fontSize: "14px", fontWeight: 600, color: "#eee" }}>{info.short}</span>
-                        {mealsAddedDays[dateStr] && <span style={{ fontFamily: QS, fontSize: "10px", color: "#4CAF50", fontWeight: 600 }}>✓ added</span>}
-                        {!selectable && <span style={{ fontFamily: QS, fontSize: "10px", color: "#888", fontStyle: "italic" }}>manual only — add groceries yourself</span>}
+                        {hasEligible && someSel && !allSel && <span style={{ fontFamily: QS, fontSize: "10px", color: "#BB86FC", fontWeight: 600 }}>{selCount}/{eligible.length}</span>}
+                        {!hasEligible && <span style={{ fontFamily: QS, fontSize: "10px", color: "#888", fontStyle: "italic" }}>manual only — add groceries yourself</span>}
                       </div>
                     </div>
-                    {checked && dayMeals.map(m => {
+                    {dayMeals.map(m => {
                       if (m.isManual || !m.ingredients.trim()) {
                         return (
-                          <div key={m.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 14px 8px 48px", borderTop: "1px solid #ffffff0a", opacity: 0.5 }}>
+                          <div key={m.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 14px 8px 16px", borderTop: "1px solid #ffffff0a", opacity: 0.5 }}>
                             <span style={{ fontFamily: QS, fontSize: "13px", color: "#999", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
                             <span style={{ fontFamily: QS, fontSize: "10px", color: "#888", fontStyle: "italic", flexShrink: 0 }}>manual — not added</span>
                           </div>
                         );
                       }
                       const key = `${dateStr}__${m.id}`;
+                      const sel = !!mealSelected[key];
+                      const already = !!mealsAdded[key];
                       const mm = mealMults[key] || 1;
                       return (
-                        <div key={m.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", padding: "8px 14px 8px 48px", borderTop: "1px solid #ffffff0a" }}>
-                          <span style={{ fontFamily: QS, fontSize: "13px", color: "#ccc", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
-                          <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
-                            {[1,2,3,4].map(n => (
-                              <div key={n} onClick={() => setMealMults(prev => ({ ...prev, [key]: n }))} style={{ width: "28px", height: "28px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: QS, fontSize: "12px", fontWeight: 700, background: mm === n ? "#BB86FC" : "#2a2a2a", color: mm === n ? "#000" : "#777", border: mm === n ? "1.5px solid #BB86FC" : "1.5px solid #333" }}>{n}x</div>
-                            ))}
+                        <div key={m.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 14px 8px 16px", borderTop: "1px solid #ffffff0a" }}>
+                          <div onClick={() => setMealSelected(prev => ({ ...prev, [key]: !prev[key] }))} style={{ width: "20px", height: "20px", borderRadius: "5px", border: `2px solid ${sel ? "#BB86FC" : "#555"}`, background: sel ? "#BB86FC" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: "pointer" }}>
+                            {sel && <Check size={12} color="#000" style={{ pointerEvents: "none" }} />}
                           </div>
+                          <span onClick={() => setMealSelected(prev => ({ ...prev, [key]: !prev[key] }))} style={{ fontFamily: QS, fontSize: "13px", color: sel ? "#ccc" : "#666", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{m.name}{already && <span style={{ color: "#4CAF50", fontSize: "10px", marginLeft: "6px" }}>✓ added</span>}</span>
+                          {sel ? (
+                            <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+                              {[1,2,3,4].map(n => (
+                                <div key={n} onClick={() => setMealMults(prev => ({ ...prev, [key]: n }))} style={{ width: "26px", height: "26px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: QS, fontSize: "11px", fontWeight: 700, background: mm === n ? "#BB86FC" : "#2a2a2a", color: mm === n ? "#000" : "#777", border: mm === n ? "1.5px solid #BB86FC" : "1.5px solid #333" }}>{n}x</div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span style={{ fontFamily: QS, fontSize: "11px", color: "#666", fontStyle: "italic", flexShrink: 0 }}>skipped</span>
+                          )}
                         </div>
                       );
                     })}
