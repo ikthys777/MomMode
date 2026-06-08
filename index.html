@@ -249,6 +249,7 @@ function MomMode() {
   const [showMealGroceryModal, setShowMealGroceryModal] = useState(false);
   const [mealGroceryDays, setMealGroceryDays] = useState({});
   const [mealMults, setMealMults] = useState({});
+  const [manualMealInput, setManualMealInput] = useState("");
   const [weekOffset, setWeekOffset] = useState(0);
   const [mealPickerDay, setMealPickerDay] = useState(null);
 
@@ -1228,6 +1229,15 @@ function MomMode() {
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
+  // A meal-plan entry is either a recipe id (number) or a manual meal object {manual, id, name}
+  const resolveMeal = (entry) => {
+    if (entry && typeof entry === "object" && entry.manual) {
+      return { id: entry.id, name: entry.name, category: "", ingredients: "", isManual: true };
+    }
+    const r = recipes.find(rr => rr.id === entry);
+    return r ? { id: r.id, name: r.title, category: r.category || "", ingredients: r.ingredients || "", isManual: false } : null;
+  };
+
   const assignMeal = (dateStr, recipeId) => {
     const current = mealPlan[dateStr] || [];
     if (current.includes(recipeId)) return;
@@ -1235,8 +1245,19 @@ function MomMode() {
     if (mealsAddedDays[dateStr]) { const u = { ...mealsAddedDays }; delete u[dateStr]; saveMealsAdded(u); }
   };
 
-  const removeMeal = (dateStr, recipeId) => {
-    const current = (mealPlan[dateStr] || []).filter(id => id !== recipeId);
+  const addManualMeal = (dateStr, name) => {
+    const n = name.trim();
+    if (!n) return;
+    const current = mealPlan[dateStr] || [];
+    saveMealPlan({ ...mealPlan, [dateStr]: [...current, { manual: true, id: "m" + Date.now(), name: n }] });
+    showToast(`Added "${n}"`);
+  };
+
+  const removeMeal = (dateStr, mealId) => {
+    const current = (mealPlan[dateStr] || []).filter(entry => {
+      const eid = (entry && typeof entry === "object") ? entry.id : entry;
+      return eid !== mealId;
+    });
     const updated = { ...mealPlan };
     if (current.length === 0) delete updated[dateStr]; else updated[dateStr] = current;
     saveMealPlan(updated);
@@ -1253,8 +1274,9 @@ function MomMode() {
     const selection = {};
     const mults = {};
     daysWithMeals.forEach(d => {
-      selection[d] = !mealsAddedDays[d];
-      (mealPlan[d] || []).forEach(recipeId => { mults[`${d}__${recipeId}`] = 1; });
+      const eligible = (mealPlan[d] || []).map(resolveMeal).filter(m => m && !m.isManual && m.ingredients.trim());
+      selection[d] = eligible.length > 0 && !mealsAddedDays[d];
+      eligible.forEach(m => { mults[`${d}__${m.id}`] = 1; });
     });
     setMealGroceryDays(selection);
     setMealMults(mults);
@@ -1266,16 +1288,15 @@ function MomMode() {
     if (selectedDays.length === 0) { showToast("Select at least one day"); return; }
     const sections = [];
     selectedDays.forEach(dateStr => {
-      (mealPlan[dateStr] || []).forEach(recipeId => {
-        const recipe = recipes.find(r => r.id === recipeId);
-        if (!recipe?.ingredients) return;
-        const m = mealMults[`${dateStr}__${recipeId}`] || 1;
-        const header = m > 1 ? `=== ${recipe.title} (scale ${m}x) ===` : `=== ${recipe.title} ===`;
-        sections.push(`${header}\n${recipe.ingredients}`);
+      (mealPlan[dateStr] || []).map(resolveMeal).filter(Boolean).forEach(m => {
+        if (m.isManual || !m.ingredients.trim()) return;
+        const mult = mealMults[`${dateStr}__${m.id}`] || 1;
+        const header = mult > 1 ? `=== ${m.name} (scale ${mult}x) ===` : `=== ${m.name} ===`;
+        sections.push(`${header}\n${m.ingredients}`);
       });
     });
     setShowMealGroceryModal(false);
-    if (sections.length === 0) { showToast("No ingredients in selected days"); return; }
+    if (sections.length === 0) { showToast("No recipe ingredients in selected days"); return; }
     const ok = await doSmartAdd(sections.join("\n\n"), 1);
     // Only mark days as added if the grocery add actually succeeded
     if (ok) {
@@ -1738,7 +1759,7 @@ function MomMode() {
             {days.map(dateStr => {
               const info = dayLabel(dateStr);
               const isToday = dateStr === todayStr;
-              const meals = (mealPlan[dateStr] || []).map(id => recipes.find(r => r.id === id)).filter(Boolean);
+              const meals = (mealPlan[dateStr] || []).map(resolveMeal).filter(Boolean);
               return (
                 <div key={dateStr} style={{ marginBottom: "12px", borderRadius: "14px", border: `1.5px solid ${isToday ? "#BB86FC44" : "#1e1e1e"}`, background: isToday ? "#BB86FC08" : "#111", overflow: "hidden" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderBottom: meals.length > 0 ? "1px solid #1e1e1e" : "none" }}>
@@ -1757,14 +1778,21 @@ function MomMode() {
                       <span style={{ fontFamily: QS, fontSize: "12px", color: "#BB86FC", fontWeight: 600, pointerEvents: "none" }}>Add</span>
                     </div>
                   </div>
-                  {meals.map(recipe => (
-                    <div key={recipe.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #1a1a1a" }}>
-                      <div onClick={() => { setTab("recipes"); setEditId(recipe.id); setSubView("view"); }} style={{ flex: 1, minWidth: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: "8px" }}>
-                        <span style={{ fontFamily: QS, fontSize: "14px", color: "#eee", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{recipe.title}</span>
-                        {recipe.category && <span style={{ fontFamily: QS, fontSize: "11px", color: "#888", flexShrink: 0 }}>{recipe.category}</span>}
-                        <ChevronRight size={15} color="#555" style={{ marginLeft: "auto", flexShrink: 0, pointerEvents: "none" }} />
-                      </div>
-                      <div onClick={() => removeMeal(dateStr, recipe.id)} style={{ padding: "6px", cursor: "pointer", flexShrink: 0, opacity: 0.4 }}>
+                  {meals.map(m => (
+                    <div key={m.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #1a1a1a" }}>
+                      {m.isManual ? (
+                        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ fontFamily: QS, fontSize: "14px", color: "#eee", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
+                          <span style={{ fontFamily: QS, fontSize: "10px", color: "#888", background: "#ffffff0d", border: "1px solid #ffffff14", borderRadius: "6px", padding: "1px 7px", flexShrink: 0 }}>manual</span>
+                        </div>
+                      ) : (
+                        <div onClick={() => { setTab("recipes"); setEditId(m.id); setSubView("view"); }} style={{ flex: 1, minWidth: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ fontFamily: QS, fontSize: "14px", color: "#eee", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
+                          {m.category && <span style={{ fontFamily: QS, fontSize: "11px", color: "#888", flexShrink: 0 }}>{m.category}</span>}
+                          <ChevronRight size={15} color="#555" style={{ marginLeft: "auto", flexShrink: 0, pointerEvents: "none" }} />
+                        </div>
+                      )}
+                      <div onClick={() => removeMeal(dateStr, m.id)} style={{ padding: "6px", cursor: "pointer", flexShrink: 0, opacity: 0.4 }}>
                         <X size={16} color="#FF6B6B" style={{ pointerEvents: "none" }} />
                       </div>
                     </div>
@@ -1860,28 +1888,39 @@ function MomMode() {
               {Object.keys(mealGroceryDays).map(dateStr => {
                 const checked = mealGroceryDays[dateStr];
                 const info = dayLabel(dateStr);
-                const dayMeals = (mealPlan[dateStr] || []).map(id => recipes.find(r => r.id === id)).filter(Boolean);
+                const dayMeals = (mealPlan[dateStr] || []).map(resolveMeal).filter(Boolean);
+                const eligibleCount = dayMeals.filter(m => !m.isManual && m.ingredients.trim()).length;
+                const selectable = eligibleCount > 0;
                 return (
-                  <div key={dateStr} style={{ marginBottom: "8px", borderRadius: "12px", background: checked ? "#BB86FC12" : "#151515", border: `1.5px solid ${checked ? "#BB86FC66" : "#222"}`, overflow: "hidden" }}>
-                    <div onClick={() => setMealGroceryDays(prev => ({ ...prev, [dateStr]: !prev[dateStr] }))}
-                      style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", cursor: "pointer" }}>
+                  <div key={dateStr} style={{ marginBottom: "8px", borderRadius: "12px", background: checked ? "#BB86FC12" : "#151515", border: `1.5px solid ${checked ? "#BB86FC66" : "#222"}`, overflow: "hidden", opacity: selectable ? 1 : 0.6 }}>
+                    <div onClick={() => { if (selectable) setMealGroceryDays(prev => ({ ...prev, [dateStr]: !prev[dateStr] })); }}
+                      style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", cursor: selectable ? "pointer" : "default" }}>
                       <div style={{ width: "22px", height: "22px", borderRadius: "6px", border: `2px solid ${checked ? "#BB86FC" : "#444"}`, background: checked ? "#BB86FC" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         {checked && <Check size={14} color="#000" style={{ pointerEvents: "none" }} />}
                       </div>
                       <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "8px" }}>
                         <span style={{ fontFamily: QS, fontSize: "14px", fontWeight: 600, color: "#eee" }}>{info.short}</span>
                         {mealsAddedDays[dateStr] && <span style={{ fontFamily: QS, fontSize: "10px", color: "#4CAF50", fontWeight: 600 }}>✓ added</span>}
+                        {!selectable && <span style={{ fontFamily: QS, fontSize: "10px", color: "#888", fontStyle: "italic" }}>manual only — add groceries yourself</span>}
                       </div>
                     </div>
-                    {checked && dayMeals.map(recipe => {
-                      const key = `${dateStr}__${recipe.id}`;
+                    {checked && dayMeals.map(m => {
+                      if (m.isManual || !m.ingredients.trim()) {
+                        return (
+                          <div key={m.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 14px 8px 48px", borderTop: "1px solid #ffffff0a", opacity: 0.5 }}>
+                            <span style={{ fontFamily: QS, fontSize: "13px", color: "#999", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
+                            <span style={{ fontFamily: QS, fontSize: "10px", color: "#888", fontStyle: "italic", flexShrink: 0 }}>manual — not added</span>
+                          </div>
+                        );
+                      }
+                      const key = `${dateStr}__${m.id}`;
                       const mm = mealMults[key] || 1;
                       return (
-                        <div key={recipe.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", padding: "8px 14px 8px 48px", borderTop: "1px solid #ffffff0a" }}>
-                          <span style={{ fontFamily: QS, fontSize: "13px", color: "#ccc", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{recipe.title}</span>
+                        <div key={m.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", padding: "8px 14px 8px 48px", borderTop: "1px solid #ffffff0a" }}>
+                          <span style={{ fontFamily: QS, fontSize: "13px", color: "#ccc", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
                           <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
-                            {[1,2,3,4].map(m => (
-                              <div key={m} onClick={() => setMealMults(prev => ({ ...prev, [key]: m }))} style={{ width: "28px", height: "28px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: QS, fontSize: "12px", fontWeight: 700, background: mm === m ? "#BB86FC" : "#2a2a2a", color: mm === m ? "#000" : "#777", border: mm === m ? "1.5px solid #BB86FC" : "1.5px solid #333" }}>{m}x</div>
+                            {[1,2,3,4].map(n => (
+                              <div key={n} onClick={() => setMealMults(prev => ({ ...prev, [key]: n }))} style={{ width: "28px", height: "28px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: QS, fontSize: "12px", fontWeight: 700, background: mm === n ? "#BB86FC" : "#2a2a2a", color: mm === n ? "#000" : "#777", border: mm === n ? "1.5px solid #BB86FC" : "1.5px solid #333" }}>{n}x</div>
                             ))}
                           </div>
                         </div>
@@ -1902,18 +1941,26 @@ function MomMode() {
       )}
       {mealPickerDay && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "0", animation: "fadeIn 0.15s ease" }}
-          onClick={() => setMealPickerDay(null)}>
+          onClick={() => { setMealPickerDay(null); setManualMealInput(""); }}>
           <div onClick={e => e.stopPropagation()} style={{ background: "#1a1a1a", borderRadius: "20px 20px 0 0", padding: "20px", width: "100%", maxHeight: "70vh", display: "flex", flexDirection: "column", border: "1px solid #2a2a2a" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexShrink: 0 }}>
               <div>
                 <h3 style={{ fontFamily: QS, fontSize: "16px", fontWeight: 600, color: "#eee", margin: 0 }}>Add Meal</h3>
                 <p style={{ fontFamily: QS, fontSize: "13px", color: "#888", margin: "2px 0 0" }}>{dayLabel(mealPickerDay).full}</p>
               </div>
-              <div onClick={() => setMealPickerDay(null)} style={{ padding: "8px", cursor: "pointer" }}><X size={20} color="#888" style={{ pointerEvents: "none" }} /></div>
+              <div onClick={() => { setMealPickerDay(null); setManualMealInput(""); }} style={{ padding: "8px", cursor: "pointer" }}><X size={20} color="#888" style={{ pointerEvents: "none" }} /></div>
+            </div>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexShrink: 0 }}>
+              <input value={manualMealInput} onChange={e => setManualMealInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && manualMealInput.trim()) { addManualMeal(mealPickerDay, manualMealInput); setManualMealInput(""); } }}
+                placeholder="Quick meal name (no recipe)..."
+                style={{ flex: 1, minWidth: 0, background: "#0f0f0f", border: "1.5px solid #333", borderRadius: "10px", padding: "11px 14px", fontFamily: QS, fontSize: "14px", color: "#eee", outline: "none" }} />
+              <button onClick={() => { if (manualMealInput.trim()) { addManualMeal(mealPickerDay, manualMealInput); setManualMealInput(""); } }}
+                style={{ background: "#BB86FC", border: "none", borderRadius: "10px", padding: "0 18px", fontFamily: QS, fontSize: "14px", fontWeight: 700, color: "#000", cursor: "pointer", flexShrink: 0 }}>Add</button>
             </div>
             <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", minHeight: 0 }}>
               {recipes.length === 0 ? (
-                <p style={{ fontFamily: QS, fontSize: "14px", color: "#555", textAlign: "center", padding: "32px 0" }}>No recipes saved yet. Add some in the Recipes tab!</p>
+                <p style={{ fontFamily: QS, fontSize: "13px", color: "#555", textAlign: "center", padding: "20px 0" }}>No saved recipes yet — add a quick meal above, or create recipes in the Recipes tab.</p>
               ) : recipes.map(recipe => {
                 const alreadyAdded = (mealPlan[mealPickerDay] || []).includes(recipe.id);
                 return (
