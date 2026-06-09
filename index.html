@@ -467,6 +467,38 @@ function MomMode() {
   };
 
   const resetSubView = () => { setSubView(null); setEditId(null); setNoteTitle(""); setNoteBody(""); setNoteColor(null); setNoteDueDate(""); setNoteChecklist(false); setNoteChecklistItems([]); setChecklistInput(""); setRecipeTitle(""); setRecipeUrl(""); setRecipeIngredients(""); setRecipeInstructions(""); setRecipeCategory(""); setExtractError(""); };
+
+  // -- Hardware back button -> in-app navigation (PWA boundary bridge) --
+  const backHandlerRef = useRef(null);
+  const handleHardwareBack = () => {
+    if (confirmAction) { setConfirmAction(null); return true; }
+    if (pendingIngredients) { setPendingIngredients(null); return true; }
+    if (longPressItem) { setLongPressItem(null); return true; }
+    if (exportDataStr) { setExportDataStr(""); return true; }
+    if (viewFamilyRecipe) { setViewFamilyRecipe(null); return true; }
+    if (showFamilyRecipes) { setShowFamilyRecipes(false); return true; }
+    if (shareFormatPicker) { setShareFormatPicker(false); return true; }
+    if (showClockSettings) { setShowClockSettings(false); return true; }
+    if (showNoteSort) { setShowNoteSort(false); return true; }
+    if (showRecipeSort) { setShowRecipeSort(false); return true; }
+    if (showGroceryCats) { setShowGroceryCats(false); return true; }
+    if (mealPickerDay) { setMealPickerDay(null); setManualMealInput(""); return true; }
+    if (showMealGroceryModal) { setShowMealGroceryModal(false); return true; }
+    if (subView) { resetSubView(); return true; }
+    if (tab !== "clock") { setTab("clock"); return true; }
+    return false;
+  };
+  useEffect(() => { backHandlerRef.current = handleHardwareBack; });
+  useEffect(() => {
+    window.history.pushState({ cfBuf: true }, "");
+    const onPop = () => {
+      const consumed = backHandlerRef.current && backHandlerRef.current();
+      if (consumed) { window.history.pushState({ cfBuf: true }, ""); }
+      else { window.history.back(); }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   const confirmDelete = (msg, fn, label) => setConfirmAction({ message: msg, onConfirm: () => { fn(); setConfirmAction(null); }, confirmLabel: label });
 
   // Sort & filter
